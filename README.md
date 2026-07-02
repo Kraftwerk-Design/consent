@@ -10,7 +10,7 @@ defaults and each project supplies only its overrides.
 ### 1. Install
 
 ```bash
-npm install @kraftwerk/consent vanilla-cookieconsent
+npm install @kraftwerkdesign/consent vanilla-cookieconsent
 ```
 
 `vanilla-cookieconsent` is a peer dependency — you control its version and own
@@ -22,7 +22,7 @@ Create your per-project override object (`Partial<ConsentConfig>`), e.g. in
 `src/consent.config.ts`:
 
 ```ts
-import type { ConsentConfig } from '@kraftwerk/consent'
+import type { ConsentConfig } from '@kraftwerkdesign/consent'
 
 export const consentConfig: Partial<ConsentConfig> = {
   cookieName: 'acme_cookie_consent',
@@ -51,7 +51,7 @@ anything you omit falls through to them.
 ### 3. Initialize in app entry
 
 ```js
-import { initConsent } from '@kraftwerk/consent'
+import { initConsent } from '@kraftwerkdesign/consent'
 import { consentConfig } from './consent.config'
 
 // The package ships no CSS side-effect — import the banner styles yourself.
@@ -108,7 +108,7 @@ import); the app wires it to the framework via static gates:
 
 ```ts
 import { LiteYTEmbed } from '@/js/lib/liteYoutube.ts'
-import { hasAnalyticsConsent, requireAnalyticsConsent } from '@kraftwerk/consent'
+import { hasAnalyticsConsent, requireAnalyticsConsent } from '@kraftwerkdesign/consent'
 
 LiteYTEmbed.consentGate = requireAnalyticsConsent  // click: may open UI
 LiteYTEmbed.consentReady = hasAnalyticsConsent      // passive: warm/autoload
@@ -162,7 +162,7 @@ use this.
 — use the `setupConsentGate` primitive directly:
 
 ```ts
-import { setupConsentGate } from '@kraftwerk/consent'
+import { setupConsentGate } from '@kraftwerkdesign/consent'
 
 setupConsentGate({
   activate: () => { /* load widget; return false if no consent */ return true },
@@ -175,7 +175,7 @@ setupConsentGate({
 **Imperative API (components):**
 
 ```ts
-import { requireAnalyticsConsent, hasAnalyticsConsent } from '@kraftwerk/consent'
+import { requireAnalyticsConsent, hasAnalyticsConsent } from '@kraftwerkdesign/consent'
 
 if (!requireAnalyticsConsent()) return // opens consent UI
 ```
@@ -183,7 +183,7 @@ if (!requireAnalyticsConsent()) return // opens consent UI
 **Listen for consent changes:**
 
 ```ts
-import { onAnalyticsConsentChange } from '@kraftwerk/consent'
+import { onAnalyticsConsentChange } from '@kraftwerkdesign/consent'
 
 const unsubscribe = onAnalyticsConsentChange((accepted) => {
   // react to consent change

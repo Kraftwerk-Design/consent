@@ -1,5 +1,5 @@
 {
-  "name": "@kraftwerk/consent",
+  "name": "@kraftwerkdesign/consent",
   "version": "0.1.4",
   "description": "Cookie consent built on vanilla-cookieconsent with GPC support, analytics gating, and consent-gated embeds.",
   "author": "Kraftwerk Design",
