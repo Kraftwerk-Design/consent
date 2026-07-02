@@ -1,0 +1,1 @@
+export { defineConsentEmbed } from './consentEmbed'
