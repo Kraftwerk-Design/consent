@@ -226,3 +226,28 @@ src/
 - **GPC override (`allowGpcOverride`, default `false`):** by default GPC is a hard lock — the analytics category is forced read-only and re-clamped to necessary-only on every load, so a visitor can never turn tracking back on. Set `allowGpcOverride: true` to treat GPC as an overridable *default* instead: analytics still starts off and the banner explains the signal was honored, but the preferences toggle stays operable, the banner offers an explicit **Accept all** / **Keep off** choice, and a saved opt-in sticks across loads (and reloads to activate blocked scripts, like any non-GPC change). GPC is a legally binding opt-out where laws like CCPA/CPRA apply; only enable this where a genuine, user-initiated override is appropriate, and treat it as a compliance decision. The GPC spec explicitly contemplates it — *"a specific arrangement with that person may permit a website to ignore a generally applicable preference"* ([W3C GPC draft](https://w3c.github.io/gpc/)).
 - **Imperative API** is exposed at `window[windowNamespace]` (default `window.KDConsent`) with `hasAnalyticsConsent`, `requireAnalyticsConsent`, `promptAnalyticsConsent`, and `onAnalyticsConsentChange`.
 - Importing `analytics.ts` has **no side effects**; the window API and `[data-require-analytics]` delegation are registered by `initConsentApi()` (called from `initConsent()`).
+
+## Releasing
+
+Publishing is fully automated — a version bump does the rest.
+
+```bash
+npm run release:patch   # 0.1.5 → 0.1.6   (bug fixes)
+npm run release:minor   # 0.1.5 → 0.2.0   (new features)
+npm run release:major   # 0.1.5 → 1.0.0   (breaking changes)
+```
+
+Each command runs `npm version`, which:
+
+1. typechecks (`preversion`),
+2. bumps `package.json` and creates a `vX.Y.Z` git tag,
+3. pushes the commit and tag, then opens a GitHub Release with generated notes (`postversion`).
+
+Publishing the GitHub Release triggers the **Publish to npm** workflow
+(`.github/workflows/publish.yml`), which typechecks, builds, verifies the tag
+matches `package.json`, and runs `npm publish`. Auth is npm **OIDC trusted
+publishing** — no `NPM_TOKEN` secret, and provenance is generated automatically.
+
+Work on a branch and merge to `main` before releasing; the release commit lands
+on your current branch. If you need to publish by hand, `npm publish` runs
+`prepublishOnly` (typecheck + build) first.

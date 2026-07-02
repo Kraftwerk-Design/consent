@@ -11,15 +11,7 @@
   "bugs": {
     "url": "https://github.com/Kraftwerk-Design/consent/issues"
   },
-  "keywords": [
-    "consent",
-    "cookie-consent",
-    "gdpr",
-    "gpc",
-    "privacy",
-    "analytics",
-    "vanilla-cookieconsent"
-  ],
+  "keywords": [],
   "type": "module",
   "types": "./dist/index.d.ts",
   "module": "./dist/index.js",
