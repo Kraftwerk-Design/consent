@@ -85,12 +85,6 @@ You can also import your own overrides after it to restyle the banner.
 
 For SEOmatic, re-tag script container tags in the layout (see `templates/_layouts/baseHtml.twig`).
 
-> **GPC is detected entirely client-side** via `navigator.globalPrivacyControl`
-> — no `Sec-GPC` header check or Twig function is needed. Do **not** gate markup
-> server-side on the header: it's redundant (blocked `text/plain` scripts never
-> run for GPC visitors anyway) and breaks on statically-cached pages, where a
-> server-rendered flag is frozen for every visitor.
-
 ### 5. Gate embeds & widgets
 
 | Pattern | When to use |
@@ -232,27 +226,3 @@ src/
 - **GPC override (`allowGpcOverride`, default `false`):** by default GPC is a hard lock — the analytics category is forced read-only and re-clamped to necessary-only on every load, so a visitor can never turn tracking back on. Set `allowGpcOverride: true` to treat GPC as an overridable *default* instead: analytics still starts off and the banner explains the signal was honored, but the preferences toggle stays operable, the banner offers an explicit **Accept all** / **Keep off** choice, and a saved opt-in sticks across loads (and reloads to activate blocked scripts, like any non-GPC change). GPC is a legally binding opt-out where laws like CCPA/CPRA apply; only enable this where a genuine, user-initiated override is appropriate, and treat it as a compliance decision. The GPC spec explicitly contemplates it — *"a specific arrangement with that person may permit a website to ignore a generally applicable preference"* ([W3C GPC draft](https://w3c.github.io/gpc/)).
 - **Imperative API** is exposed at `window[windowNamespace]` (default `window.KDConsent`) with `hasAnalyticsConsent`, `requireAnalyticsConsent`, `promptAnalyticsConsent`, and `onAnalyticsConsentChange`.
 - Importing `analytics.ts` has **no side effects**; the window API and `[data-require-analytics]` delegation are registered by `initConsentApi()` (called from `initConsent()`).
-
-## Migrating an existing site
-
-Porting a project off the pre-config-injection version:
-
-| Old | New |
-|---|---|
-| `initConsent()` (no args) | `initConsent(siteConsentConfig)` |
-| `consentConfig` singleton import | `getConsentConfig()` |
-| `window.requireAnalyticsConsent` / `window.bvRequireAnalyticsConsent` | `window.KDConsent.requireAnalyticsConsent` |
-| `categories: { necessary, analytics }` object in config | `categories: [...]` array (see [Adding a category](#adding-a-category)) |
-| Consent imported inside `lite-youtube` | Component is standalone; wire `LiteYTEmbed.consentGate` / `consentReady` in the app entry |
-| Section copy hard-coded in `copy/en.ts` | Per-category copy lives on the category config; `en.ts` renders the shell |
-| `media/` folder, `initConsentGatedMedia()` | `<consent-embed>` element (`defineConsentEmbed()`); the shared lifecycle is `gate.ts` `setupConsentGate()` |
-| `[data-consent-embed]` markup + registry (`registerEmbedType`/`initConsentEmbeds`) | `<consent-embed>` with the embed in a `<template>` — self-upgrading, no registry |
-| `consentYoutube.twig` macro / `[data-consent-youtube*]` markup | YouTube uses `<lite-youtube>` (`background` for muted-autoplay); other embeds use `<consent-embed>` |
-| `[data-consent-video]` native video | Removed — not a consent concern (self-hosted MP4 sets no tracking cookies) |
-| `hasGlobalPrivacyControl()` Twig fn / `head.twig` GPC flag / server `{% if not gpc %}` markup gating | Removed — GPC is detected client-side via `navigator.globalPrivacyControl`; drop the Twig function, `gpcWindowKey`, and any header-based markup omission |
-| CSS auto-imported by `run.ts` | Import `vanilla-cookieconsent/dist/cookieconsent.css` yourself in the app entry — the module no longer imports it |
-
-Importing `analytics.ts` no longer registers globals — anything relying on that
-side effect must ensure `initConsent()` (or `initConsentApi()`) runs. If a
-third-party/vendor snippet calls the bare `window.requireAnalyticsConsent`,
-repoint it at `window.KDConsent.requireAnalyticsConsent`.
