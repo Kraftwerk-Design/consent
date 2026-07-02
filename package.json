@@ -37,7 +37,12 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm run build"
+    "prepublishOnly": "npm run typecheck && npm run build",
+    "preversion": "npm run typecheck",
+    "postversion": "git push --follow-tags && gh release create v$npm_package_version --generate-notes",
+    "release:patch": "npm version patch",
+    "release:minor": "npm version minor",
+    "release:major": "npm version major"
   },
   "peerDependencies": {
     "vanilla-cookieconsent": "^3.0.0"
