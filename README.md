@@ -39,6 +39,7 @@ Overridable settings:
 | `categories` | Full category list — replaces the default `necessary`/`analytics` set |
 | `analyticsConsentEvent` | Custom event name (optional override) |
 | `gpcBannerAckKey` | sessionStorage key for GPC banner dismiss (optional override) |
+| `allowGpcOverride` | Let visitors opt back into analytics despite a GPC signal — GPC becomes an overridable default rather than a hard lock (default `false`). See the [GPC note](#notes) |
 | `windowNamespace` | Global namespace object for the imperative API (default `KDConsent`) |
 | `reloadOnConsentChange` | Reload on non-GPC consent change so blocked scripts activate (default `true`) |
 | `buildCopy` | Override banner/preferences copy wholesale (optional) |
@@ -228,6 +229,7 @@ src/
 
 - **Non-GPC:** consent changes trigger a full page reload so `manageScriptTags` activates blocked scripts. Set `reloadOnConsentChange: false` for SPA-style sites that rely on the live `onAnalyticsConsentChange` listeners instead.
 - **GPC:** detected client-side via `navigator.globalPrivacyControl` (no server header check — cache-safe). No reload; opt-out only blocks scripts, and an informational banner confirms the signal was honored.
+- **GPC override (`allowGpcOverride`, default `false`):** by default GPC is a hard lock — the analytics category is forced read-only and re-clamped to necessary-only on every load, so a visitor can never turn tracking back on. Set `allowGpcOverride: true` to treat GPC as an overridable *default* instead: analytics still starts off and the banner explains the signal was honored, but the preferences toggle stays operable, the banner offers an explicit **Accept all** / **Keep off** choice, and a saved opt-in sticks across loads (and reloads to activate blocked scripts, like any non-GPC change). GPC is a legally binding opt-out where laws like CCPA/CPRA apply; only enable this where a genuine, user-initiated override is appropriate, and treat it as a compliance decision. The GPC spec explicitly contemplates it — *"a specific arrangement with that person may permit a website to ignore a generally applicable preference"* ([W3C GPC draft](https://w3c.github.io/gpc/)).
 - **Imperative API** is exposed at `window[windowNamespace]` (default `window.KDConsent`) with `hasAnalyticsConsent`, `requireAnalyticsConsent`, `promptAnalyticsConsent`, and `onAnalyticsConsentChange`.
 - Importing `analytics.ts` has **no side effects**; the window API and `[data-require-analytics]` delegation are registered by `initConsentApi()` (called from `initConsent()`).
 

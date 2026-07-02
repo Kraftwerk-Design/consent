@@ -10,7 +10,18 @@ import { getConsentConfig } from '../config'
 export function buildEnglishCopy(
   gpcActive: boolean,
 ): CookieConsentConfig['language'] {
-  const { privacyPolicyUrl, categories } = getConsentConfig()
+  const { privacyPolicyUrl, categories, allowGpcOverride } = getConsentConfig()
+
+  // GPC as a hard lock vs. GPC as an overridable default.
+  const gpcLocked = gpcActive && !allowGpcOverride
+
+  const gpcConsentDescription = gpcLocked
+    ? 'Your browser\'s Global Privacy Control (GPC) signal is on. We\'ve applied your choice — only strictly necessary cookies are in use and analytics or marketing tools will not load. You can review details anytime.'
+    : 'Your browser\'s Global Privacy Control (GPC) signal is on, so only strictly necessary cookies are in use by default. You can turn on analytics and marketing anytime under Manage preferences.'
+
+  const gpcChoicesDescription = gpcLocked
+    ? 'Global Privacy Control (GPC) is enabled in your browser. Analytics and marketing cookies are turned off and cannot be enabled while this signal is active.'
+    : 'Global Privacy Control (GPC) is enabled in your browser, so analytics and marketing cookies are turned off by default. You can choose to enable them below — doing so overrides the GPC signal for this site.'
 
   const categorySections = categories.map((category) => ({
     title: category.copy?.title ?? category.id,
@@ -27,7 +38,7 @@ export function buildEnglishCopy(
             ? 'Your privacy settings'
             : 'Enjoy the full experience',
           description: gpcActive
-            ? 'Your browser\'s Global Privacy Control (GPC) signal is on. We\'ve applied your choice — only strictly necessary cookies are in use and analytics or marketing tools will not load. You can review details anytime.'
+            ? gpcConsentDescription
             : 'We use cookies to keep our site running and (with your consent) to understand how you found us and show you relevant ads. You can change your mind anytime.',
           acceptAllBtn: gpcActive ? undefined : 'Accept all',
           acceptNecessaryBtn: gpcActive ? 'Got it' : undefined,
@@ -35,7 +46,7 @@ export function buildEnglishCopy(
         },
         preferencesModal: {
           title: 'Cookie preferences',
-          acceptAllBtn: gpcActive ? undefined : 'Accept all',
+          acceptAllBtn: gpcLocked ? undefined : 'Accept all',
           acceptNecessaryBtn: 'Reject non-essential',
           savePreferencesBtn: 'Save preferences',
           closeIconLabel: 'Close',
@@ -43,7 +54,7 @@ export function buildEnglishCopy(
             {
               title: 'Your privacy choices',
               description: gpcActive
-                ? 'Global Privacy Control (GPC) is enabled in your browser. Analytics and marketing cookies are turned off and cannot be enabled while this signal is active.'
+                ? gpcChoicesDescription
                 : 'You can change these settings at any time. Non-essential tools will only load after you opt in.',
             },
             ...categorySections,

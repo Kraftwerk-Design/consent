@@ -16,14 +16,18 @@ export interface CategoryCopy {
  * with vanilla-cookieconsent and rendered as a section in the preferences
  * modal. Exactly one category should set `analytics: true`; that is the bucket
  * the imperative gate helpers (`hasAnalyticsConsent` / `requireAnalyticsConsent`)
- * key off, and the one GPC forces to read-only.
+ * key off, and the one GPC forces to read-only (unless `allowGpcOverride`).
  */
 export interface ConsentCategory {
   /** Category id used by vanilla-cookieconsent and `linkedCategory` in copy. */
   id: string
   /** Enabled by default (necessary categories only). */
   enabled?: boolean
-  /** Locked on (necessary categories). GPC also forces the analytics one on. */
+  /**
+   * Locked on (necessary categories). GPC also forces the analytics one
+   * read-only — unless `allowGpcOverride` is set, in which case the visitor
+   * keeps control of it.
+   */
   readOnly?: boolean
   /** Marks the consent-gated tracking bucket the JS gate helpers check. */
   analytics?: boolean
@@ -49,6 +53,21 @@ export interface ConsentConfig {
   analyticsConsentEvent: string
   /** sessionStorage key — GPC acknowledgment banner dismissed this session. */
   gpcBannerAckKey: string
+  /**
+   * Let a visitor explicitly opt back into the analytics category even when
+   * their browser sends a GPC signal. When `true`, GPC is honored as the
+   * *default* — analytics starts off and the banner explains the signal — but
+   * the preferences toggle stays operable and a saved opt-in is respected on
+   * every load. When `false` (the default), GPC is a hard lock: the analytics
+   * category is forced read-only and re-clamped to necessary-only each load.
+   *
+   * Enabling this has legal implications where GPC is a binding opt-out
+   * (e.g. CCPA/CPRA); the override must be a genuine, user-initiated action.
+   * The GPC spec contemplates it — a "specific arrangement with that person may
+   * permit a website to ignore a generally applicable preference" — but treat
+   * it as a compliance decision, not a default. See README.
+   */
+  allowGpcOverride: boolean
   /** Namespace object exposed on `window` for the imperative consent API. */
   windowNamespace: string
   /**
@@ -105,6 +124,8 @@ export const defaultConsentConfig: ConsentConfig = {
   analyticsConsentEvent: 'site:analytics-consent',
 
   gpcBannerAckKey: 'site_gpc_banner_ack',
+
+  allowGpcOverride: false,
 
   windowNamespace: 'KDConsent',
 

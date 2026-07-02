@@ -16,6 +16,12 @@ function isGpcCompliant(): boolean {
 function applyGpcIfNeeded(): void {
   if (!hasGpcSignal() || isGpcCompliant()) return
 
+  // Override mode: GPC is the default, not a lock. Analytics is already off via
+  // the category's default-disabled state (so the signal is honored), and we
+  // record nothing automatically — that leaves the visitor free to opt in and
+  // never overturns a choice they've already saved.
+  if (getConsentConfig().allowGpcOverride) return
+
   CookieConsent.acceptCategory([])
 }
 
@@ -36,7 +42,9 @@ function buildCategories(
   for (const category of getConsentConfig().categories) {
     categories[category.id] = {
       enabled: category.enabled ?? false,
-      readOnly: (category.readOnly ?? false) || (category.analytics === true && gpcActive),
+      readOnly:
+        (category.readOnly ?? false) ||
+        (category.analytics === true && gpcActive && !getConsentConfig().allowGpcOverride),
       ...(category.autoClear
         ? { autoClear: { cookies: category.autoClear } }
         : {}),
@@ -50,9 +58,13 @@ export function runConsent(): Promise<void> {
   const config = getConsentConfig()
   const gpcActive = hasGpcSignal()
 
-  /** Non-GPC consent changes reload so blocked script tags re-activate. */
+  /**
+   * Consent changes reload so blocked script tags re-activate. Skipped under
+   * GPC — where consent is fixed — unless override is enabled, in which case a
+   * GPC visitor's own opt-in must activate scripts just like any other.
+   */
   const reloadIfNeeded = (): void => {
-    if (hasGpcSignal()) return
+    if (hasGpcSignal() && !config.allowGpcOverride) return
     if (!config.reloadOnConsentChange) return
     window.location.reload()
   }

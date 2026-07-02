@@ -3,7 +3,11 @@ import { analyticsCategoryId, getConsentConfig } from './config'
 import { hasGpcSignal } from './gpc'
 
 export function hasAnalyticsConsent(): boolean {
-  if (hasGpcSignal()) return false
+  // GPC forces analytics off — unless the visitor is allowed to, and did,
+  // explicitly opt back in. In override mode fall through to the real consent
+  // check so a saved opt-in actually counts (otherwise gated embeds stay
+  // blocked and keep re-prompting after the user accepts).
+  if (hasGpcSignal() && !getConsentConfig().allowGpcOverride) return false
 
   return (
     CookieConsent.validConsent() &&
