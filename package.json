@@ -3,13 +3,13 @@
   "version": "0.1.4",
   "description": "Cookie consent built on vanilla-cookieconsent with GPC support, analytics gating, and consent-gated embeds.",
   "author": "Kraftwerk Design",
-  "homepage": "https://github.com/kraftwerkdesign/consent#readme",
+  "homepage": "https://github.com/Kraftwerk-Design/consent#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kraftwerkdesign/consent.git"
+    "url": "git+https://github.com/Kraftwerk-Design/consent.git"
   },
   "bugs": {
-    "url": "https://github.com/kraftwerkdesign/consent/issues"
+    "url": "https://github.com/Kraftwerk-Design/consent/issues"
   },
   "keywords": [
     "consent",
