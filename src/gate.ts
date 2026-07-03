@@ -1,8 +1,4 @@
-import {
-  hasAnalyticsConsent,
-  onAnalyticsConsentChange,
-  requireAnalyticsConsent,
-} from './analytics'
+import { hasConsent, onConsentChange, requireConsent } from './analytics'
 
 /** Hide an element without depending on a CSS framework's utility class. */
 export function hide(el: HTMLElement | null | undefined): void {
@@ -23,6 +19,8 @@ export interface ConsentGate {
   triggers: (HTMLElement | null | undefined)[]
   /** Activate automatically as soon as consent is present. */
   autoActivate: boolean
+  /** Consent category this gate depends on. Defaults to the default gate category. */
+  category?: string
 }
 
 /**
@@ -47,16 +45,18 @@ export function setupConsentGate(gate: ConsentGate): void {
     activated = false
   }
 
+  const category = gate.category
+
   const onTrigger = (event: Event): void => {
     event.preventDefault()
     if (activate()) return
-    requireAnalyticsConsent()
+    requireConsent(category)
   }
 
   gate.triggers.forEach((el) => el?.addEventListener('click', onTrigger))
 
   const sync = (): void => {
-    if (!hasAnalyticsConsent()) {
+    if (!hasConsent(category)) {
       deactivate()
       return
     }
@@ -64,5 +64,5 @@ export function setupConsentGate(gate: ConsentGate): void {
   }
 
   sync()
-  onAnalyticsConsentChange(sync)
+  onConsentChange(sync, category)
 }
