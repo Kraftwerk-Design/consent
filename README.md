@@ -93,6 +93,7 @@ pieces yourself, call `configureConsent(overrides)` first, then
 |---|---|
 | `<lite-youtube>` + gate wired in app entry | YouTube — click-to-play or muted-autoplay `background` |
 | `<consent-embed>` element | Maps, social embeds, any third-party embed without a dedicated facade |
+| `<consent-pour>` element | PourNow wine-finder — dedicated facade that internalizes its companion script |
 | `setupConsentGate()` primitive | Imperative escape hatch for bespoke JS widgets (chat, custom SDKs) |
 | `[data-require-analytics]` attribute | Generic click-to-consent on links/buttons |
 
@@ -153,6 +154,27 @@ The element self-upgrades, so `<consent-embed>` markup injected dynamically
 (AJAX/Alpine) is gated too — no re-scan needed. Adding a new embed type is just
 new markup; no JS registration. YouTube/Vimeo keep their own facades and don't
 use this.
+
+**`<consent-pour>` element** — the PourNow wine-finder ships an iframe plus a
+companion script that hooks `DOMContentLoaded`, finds the iframe by id, resizes
+it from `iframeHeight` postMessages, and forwards a `?productId` into it on
+load. That lifecycle is incompatible with gating (the iframe mustn't exist or
+fetch `find.pour.now` before opt-in), so this element **internalizes** the
+script: it owns the iframe, builds it on consent from the `shelf` UUID, runs
+the height/`productId` logic scoped to itself, and tears everything down (iframe
++ its `message` listener) on withdrawal.
+
+```html
+<consent-pour shelf="2556d19f-…" category="functionality" autoactivate>
+  <button data-poster>Enable the wine finder</button>
+</consent-pour>
+```
+
+`shelf` (required) becomes `https://find.pour.now/{shelf}`. `category` defaults
+to the gate category; `height` sets the initial px height (default `1130`) until
+the iframe's own messages take over; `autoactivate` loads as soon as consent is
+present, otherwise a `[data-poster]` click activates. Each element owns its
+iframe, so multiple shelves on a page never cross-talk.
 
 **Gating a bespoke JS widget** (chat, a custom SDK that isn't `<template>`-able)
 — use the `setupConsentGate` primitive directly:

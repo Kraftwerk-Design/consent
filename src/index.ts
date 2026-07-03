@@ -1,6 +1,6 @@
 import { initConsentApi } from './analytics'
 import { configureConsent, type ConsentConfig } from './config'
-import { defineConsentEmbed } from './embeds/index'
+import { defineConsentEmbed, defineConsentPour } from './embeds/index'
 import { runConsent } from './run'
 
 export { getConsentConfig, configureConsent } from './config'
@@ -27,12 +27,12 @@ export type { ConsentGate } from './gate'
 
 export { runConsent } from './run'
 
-export { defineConsentEmbed } from './embeds/index'
+export { defineConsentEmbed, defineConsentPour } from './embeds/index'
 
 /**
  * Initialize the full consent stack: merge per-project config, expose the
- * imperative API on `window`, register the `<consent-embed>` element, and run
- * the banner.
+ * imperative API on `window`, register the `<consent-embed>` and
+ * `<consent-pour>` elements, and run the banner.
  */
 export function initConsent(
   overrides: Partial<ConsentConfig> = {},
@@ -40,5 +40,6 @@ export function initConsent(
   configureConsent(overrides)
   initConsentApi()
   defineConsentEmbed()
+  defineConsentPour()
   return runConsent()
 }
