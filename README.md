@@ -66,17 +66,7 @@ initConsent(consentConfig)
 pieces yourself, call `configureConsent(overrides)` first, then
 `initConsentApi()`, `defineConsentEmbed()`, and `runConsent()`.
 
-**Styles:** the module never imports CSS itself (so it stays a pure-JS,
-tree-shakeable, package-ready module). Import `vanilla-cookieconsent`'s
-stylesheet once in your app entry — as shown above, or from your main CSS:
-
-```css
-@import 'vanilla-cookieconsent/dist/cookieconsent.css';
-```
-
-You can also import your own overrides after it to restyle the banner.
-
-### 4. Craft / Twig (server-side)
+### 4. Templates
 
 **Analytics scripts** — tag third-party scripts so vanilla-cookieconsent blocks them until opt-in:
 
@@ -84,7 +74,18 @@ You can also import your own overrides after it to restyle the banner.
 <script type="text/plain" data-category="analytics" src="…"></script>
 ```
 
-For SEOmatic, re-tag script container tags in the layout (see `templates/_layouts/baseHtml.twig`).
+**SEOmatic** 
+```twig
+{% set scriptContainer = seomatic.script.container %}
+{% if scriptContainer %}
+  {% for tag in scriptContainer.data %}
+    {% do tag.tagAttrs({
+      "type": "text/plain",
+      "data-category": "analytics",
+    }) %}
+  {% endfor %}
+{% endif %}  
+```
 
 ### 5. Gate embeds & widgets
 
