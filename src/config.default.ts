@@ -1,6 +1,6 @@
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
 
-/** A cookie the `analytics`-gated category clears on opt-out. */
+/** A cookie a category clears on opt-out. */
 export interface AutoClearCookie {
   name: string | RegExp
 }
@@ -24,9 +24,9 @@ export interface ConsentCategory {
   /** Enabled by default (necessary categories only). */
   enabled?: boolean
   /**
-   * Locked on (necessary categories). GPC also forces the analytics one
+   * Locked on (necessary categories). GPC also forces any GPC-clamped category
    * read-only — unless `allowGpcOverride` is set, in which case the visitor
-   * keeps control of it.
+   * keeps control of it. See the per-category `gpc` flag for which categories are clamped.
    */
   readOnly?: boolean
   /** Marks the consent-gated tracking bucket the JS gate helpers check. */
