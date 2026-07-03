@@ -62,9 +62,10 @@ initConsent(consentConfig)
 ```
 
 `initConsent(overrides)` merges the config, exposes the imperative API on
-`window`, registers the `<consent-embed>` element, and runs the banner. To run
-pieces yourself, call `configureConsent(overrides)` first, then
-`initConsentApi()`, `defineConsentEmbed()`, and `runConsent()`.
+`window`, registers the `<consent-embed>` and `<consent-pour>` elements, and
+runs the banner. To run pieces yourself, call `configureConsent(overrides)`
+first, then `initConsentApi()`, `defineConsentEmbed()`, `defineConsentPour()`,
+and `runConsent()`.
 
 ### 4. Templates
 
@@ -150,19 +151,12 @@ automatically when consent is already present.
 </consent-embed>
 ```
 
-The element self-upgrades, so `<consent-embed>` markup injected dynamically
-(AJAX/Alpine) is gated too — no re-scan needed. Adding a new embed type is just
-new markup; no JS registration. YouTube/Vimeo keep their own facades and don't
-use this.
-
 **`<consent-pour>` element** — the PourNow wine-finder ships an iframe plus a
-companion script that hooks `DOMContentLoaded`, finds the iframe by id, resizes
-it from `iframeHeight` postMessages, and forwards a `?productId` into it on
-load. That lifecycle is incompatible with gating (the iframe mustn't exist or
-fetch `find.pour.now` before opt-in), so this element **internalizes** the
-script: it owns the iframe, builds it on consent from the `shelf` UUID, runs
-the height/`productId` logic scoped to itself, and tears everything down (iframe
-+ its `message` listener) on withdrawal.
+companion script that hooks `DOMContentLoaded`. That lifecycle is incompatible 
+with gating, so this element **internalizes** the script: it owns the iframe, 
+builds it on consent from the `shelf` UUID, runs the height/`productId` logic 
+scoped to itself, and tears everything down (iframe + its `message` listener) 
+on withdrawal.
 
 ```html
 <consent-pour shelf="2556d19f-…" category="functionality" autoactivate>
@@ -175,6 +169,26 @@ to the gate category; `height` sets the initial px height (default `1130`) until
 the iframe's own messages take over; `autoactivate` loads as soon as consent is
 present, otherwise a `[data-poster]` click activates. Each element owns its
 iframe, so multiple shelves on a page never cross-talk.
+
+**Registration** — like `<consent-embed>`, the element must be defined before
+its markup upgrades. `initConsent()` calls `defineConsentPour()` for you, so no
+extra step is needed in the standard setup. If you wire the pieces manually
+(you called `configureConsent()`/`runConsent()` yourself instead of
+`initConsent()`), call `defineConsentPour()` too — otherwise `<consent-pour>`
+stays an inert unknown element that renders only its `[data-poster]` child and
+never reacts to consent:
+
+```ts
+import { defineConsentPour } from '@kraftwerkdesign/consent'
+
+defineConsentPour() // idempotent; safe to call more than once
+```
+
+The element self-upgrades, so `<consent-pour>` injected dynamically after
+registration is gated too. A quick sanity check in the browser console —
+`customElements.get('consent-pour')` should return the class, not `undefined`;
+`undefined` means the package build in use predates the element (rebuild /
+reinstall) or `defineConsentPour()` never ran.
 
 **Gating a bespoke JS widget** (chat, a custom SDK that isn't `<template>`-able)
 — use the `setupConsentGate` primitive directly:
