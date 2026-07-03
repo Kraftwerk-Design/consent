@@ -37,7 +37,8 @@ Overridable settings:
 | `cookieName` | Consent cookie name |
 | `privacyPolicyUrl` | Link in preferences modal |
 | `categories` | Full category list — replaces the default `necessary`/`analytics` set |
-| `analyticsConsentEvent` | Custom event name (optional override) |
+| `gateCategory` | Id of the category gate helpers target by default when a gate names none. Falls back to the `analytics: true` category, then `'analytics'`. |
+| `consentChangeEvent` | Custom DOM event dispatched when consent changes (default `consent:change`). Its `detail` is `{ accepted, categories }`. |
 | `gpcBannerAckKey` | sessionStorage key for GPC banner dismiss (optional override) |
 | `allowGpcOverride` | Let visitors opt back into analytics despite a GPC signal — GPC becomes an overridable default rather than a hard lock (default `false`). See the [GPC note](#notes) |
 | `windowNamespace` | Global namespace object for the imperative API (default `KDConsent`) |
@@ -199,6 +200,30 @@ categories: [
   { id: 'marketing', autoClear: [{ name: /^_fbp/ }], copy: { title: '…', description: '…' } },
 ]
 ```
+
+Each category also accepts an optional `gpc: boolean`. When any category sets
+`gpc`, GPC clamps exactly the `gpc: true` categories; otherwise it clamps the
+default gate category (the `analytics: true` one). This lets, e.g., a
+`functionality` category stay usable under a GPC signal while `analytics`
+remains blocked.
+
+## Targeting a specific category
+
+By default every gate keys off the default gate category (see `gateCategory`).
+To gate individual content behind a different category:
+
+- **Embeds:** `<consent-embed category="functionality">…</consent-embed>`
+- **Links/buttons:** `<a href="…" data-require-consent="functionality">` (the
+  legacy `data-require-analytics` still works and means the default category)
+- **Programmatic:** `setupConsentGate({ category: 'functionality', … })`
+- **Imperative API:** `hasConsent('functionality')`,
+  `requireConsent('functionality')`,
+  `onConsentChange(handler, 'functionality')`
+
+Omitting the category everywhere reproduces the previous single-category
+behavior. The `hasAnalyticsConsent` / `requireAnalyticsConsent` /
+`promptAnalyticsConsent` / `onAnalyticsConsentChange` helpers remain as aliases
+for the default gate category.
 
 ## File map
 

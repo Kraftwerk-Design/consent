@@ -35,7 +35,7 @@ export function defaultGateCategoryId(): string {
 /**
  * Category ids subject to the GPC clamp. If any category sets `gpc`, the set is
  * exactly the categories with `gpc: true`; otherwise it defaults to the default
- * gate category (the `analytics` one).
+ * gate category.
  */
 export function gpcClampedCategoryIds(): string[] {
   const anyGpcFlag = resolved.categories.some(

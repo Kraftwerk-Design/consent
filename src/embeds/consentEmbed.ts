@@ -2,8 +2,9 @@ import { hasConsent } from '../analytics'
 import { setupConsentGate, hide, show } from '../gate'
 
 /**
- * Register `<consent-embed>` — gates a third-party embed behind analytics
- * consent. Idempotent; call after `configureConsent()`.
+ * Register `<consent-embed>` — gates a third-party embed behind consent for a
+ * category (the default gate category, or the one named by its `category`
+ * attribute). Idempotent; call after `configureConsent()`.
  *
  * The real embed lives in a `<template>` (inert: no iframe fetch, no script
  * run) and is stamped into the element's **light DOM** only once consent is
