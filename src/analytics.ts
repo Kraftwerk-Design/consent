@@ -35,7 +35,7 @@ export function requireAnalyticsConsent(): boolean {
 
 export function dispatchAnalyticsConsentChange(): void {
   document.dispatchEvent(
-    new CustomEvent(getConsentConfig().analyticsConsentEvent, {
+    new CustomEvent(getConsentConfig().consentChangeEvent, {
       detail: { accepted: hasAnalyticsConsent() },
     }),
   )
@@ -45,7 +45,7 @@ export function dispatchAnalyticsConsentChange(): void {
 export function onAnalyticsConsentChange(
   handler: (accepted: boolean) => void,
 ): () => void {
-  const eventName = getConsentConfig().analyticsConsentEvent
+  const eventName = getConsentConfig().consentChangeEvent
   const listener = (event: Event) => {
     const accepted = (event as CustomEvent<{ accepted: boolean }>).detail
       ?.accepted

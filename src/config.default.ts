@@ -31,6 +31,12 @@ export interface ConsentCategory {
   readOnly?: boolean
   /** Marks the consent-gated tracking bucket the JS gate helpers check. */
   analytics?: boolean
+  /**
+   * Subject to the GPC clamp — forced read-only / off when a GPC signal is
+   * present (unless `allowGpcOverride`). When no category sets this flag, the
+   * clamped set defaults to the default gate category (the `analytics` one).
+   */
+  gpc?: boolean
   /** Cookies cleared when this category is opted out of. */
   autoClear?: AutoClearCookie[]
   /** Preferences-modal section copy. Add copy here when adding a category. */
@@ -49,8 +55,13 @@ export interface ConsentConfig {
   privacyPolicyUrl: string
   /** Consent categories (see {@link ConsentCategory}). */
   categories: ConsentCategory[]
-  /** Custom DOM event dispatched when analytics consent changes. */
-  analyticsConsentEvent: string
+  /**
+   * Id of the category the JS gate helpers target when a gate names none.
+   * Falls back to the category flagged `analytics: true`, then `'analytics'`.
+   */
+  gateCategory?: string
+  /** Custom DOM event dispatched when consent changes. */
+  consentChangeEvent: string
   /** sessionStorage key — GPC acknowledgment banner dismissed this session. */
   gpcBannerAckKey: string
   /**
@@ -121,7 +132,7 @@ export const defaultConsentConfig: ConsentConfig = {
     },
   ],
 
-  analyticsConsentEvent: 'site:analytics-consent',
+  consentChangeEvent: 'consent:change',
 
   gpcBannerAckKey: 'site_gpc_banner_ack',
 
