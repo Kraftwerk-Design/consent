@@ -102,26 +102,29 @@ Each gate names its category, defaulting to the default gate category.
 ### 4. Consent-change event carries all categories
 
 The single dispatched event cannot represent multiple gated categories with one
-boolean. Widen its detail while keeping the existing field meaning:
+boolean. Widen its detail, and rename the event to a neutral name (nothing
+consumes the old name yet, so no alias is needed):
 
 ```ts
 detail: {
-  accepted: boolean                     // default gate category — unchanged meaning
+  accepted: boolean                     // default gate category
   categories: Record<string, boolean>   // every configured category id → accepted
 }
 ```
 
-- `dispatchAnalyticsConsentChange` (kept name or renamed to
-  `dispatchConsentChange`; internal only) computes `accepted` from the default
-  gate category and builds `categories` from `hasConsent(id)` for each
-  configured category id.
-- `onConsentChange(handler, categoryId)` subscribes to the same DOM event. When
+- **Config field rename:** `analyticsConsentEvent` → `consentChangeEvent`,
+  default `'consent:change'` (was `'site:analytics-consent'`). This is a
+  breaking rename of a config field, acceptable pre-1.0 since nothing consumes
+  it yet.
+- `dispatchAnalyticsConsentChange` is renamed to `dispatchConsentChange`
+  (internal only). It computes `accepted` from the default gate category and
+  builds `categories` from `hasConsent(id)` for each configured category id.
+- `onConsentChange(handler, categoryId)` subscribes to the DOM event. When
   `categoryId` is given it resolves to `detail.categories[categoryId]` (the map
   contains every configured category id, including the default one); when
   `categoryId` is omitted it uses `detail.accepted` (the default gate category).
-- The event name remains `config.analyticsConsentEvent`
-  (`site:analytics-consent`) for backward compatibility. Existing listeners
-  reading `detail.accepted` continue to work unchanged.
+- The retained `onAnalyticsConsentChange` alias subscribes to the same event via
+  `onConsentChange(handler)`.
 
 ### 5. Decouple GPC clamping from gating
 
@@ -179,7 +182,7 @@ override copy via `config.buildCopy` as today.
 | `analytics: true` on a category | Still selects the default gate category and (absent `gpc` flags) the GPC-clamped category |
 | `hasAnalyticsConsent` / `requireAnalyticsConsent` / `promptAnalyticsConsent` / `onAnalyticsConsentChange` | Kept as aliases, unchanged behavior |
 | `[data-require-analytics]` | Kept as alias for the default gate category |
-| `site:analytics-consent` event + `detail.accepted` | Unchanged name and field meaning; `detail.categories` added alongside |
+| Consent-change event | Renamed `site:analytics-consent` → `consent:change` (nothing consumes it yet); config field `analyticsConsentEvent` → `consentChangeEvent`; `detail.accepted` retained, `detail.categories` added |
 | `ConsentGate` shape | `category?` added (optional) |
 | `analyticsCategoryId()` | Renamed to internal `defaultGateCategoryId()` (not publicly exported) |
 
@@ -193,7 +196,8 @@ the existing analytics-named ones.
 ## Files touched
 
 - `config.default.ts` — `gateCategory` on `ConsentConfig`; `gpc` on
-  `ConsentCategory`; doc updates.
+  `ConsentCategory`; rename `analyticsConsentEvent` → `consentChangeEvent`
+  (default `'consent:change'`); doc updates.
 - `config.ts` — `gateCategory` resolution; rename `analyticsCategoryId` →
   `defaultGateCategoryId`; add `isGpcClamped` (or place in a small gpc-set
   helper).
@@ -205,26 +209,61 @@ the existing analytics-named ones.
 - `run.ts` — GPC-clamped-set logic in `buildCategories`, `isGpcCompliant`,
   `applyGpcIfNeeded`.
 - `index.ts` — export new helpers.
-- `README.md` — document `gateCategory`, per-category `gpc`, per-gate targeting
-  (`category` attribute, `data-require-consent`, `setupConsentGate({ category })`),
-  and the general helpers.
+- `README.md` — document `gateCategory`, per-category `gpc`, the
+  `consentChangeEvent` rename, per-gate targeting (`category` attribute,
+  `data-require-consent`, `setupConsentGate({ category })`), and the general
+  helpers.
+- **New:** `vitest.config.ts`, `package.json` (devDeps + test scripts), and test
+  files under `src/**/*.test.ts` (or `test/`).
 
-## Testing / verification
+## Testing
 
-The package currently has no test suite; verification is `npm run typecheck` +
-`npm run build` plus manual DOM exercise. Plan should cover, at minimum, manual
-verification of:
+Introduce **Vitest** as the test runner. The package is ESM + TypeScript with
+`vanilla-cookieconsent` already a devDependency, so Vitest runs with no build
+step. `CookieConsent.*` calls are mocked per-test with `vi.mock('vanilla-cookieconsent')`;
+DOM-touching suites use the `jsdom` (or `happy-dom`) environment; pure modules
+run in the default node environment.
 
-1. Existing single-`analytics` site: banner, gating, GPC clamp, and the
-   `analytics*` helpers all behave exactly as before (no config change).
-2. Two-category site (`analytics` + `functionality`, video gated behind
-   `functionality`): the video loads once `functionality` is accepted,
-   independently of `analytics`; GPC does **not** block the `functionality`
-   video, but still blocks an `analytics`-gated embed.
-3. `gpc: true` on a second tracking category: GPC clamps it read-only too.
-4. `onConsentChange(h, 'functionality')` fires with the correct boolean on
-   change; legacy `detail.accepted` still reflects the default category.
+**Setup:**
 
-(If the plan opts to introduce a test harness, unit tests for
-`defaultGateCategoryId`, the GPC-clamped-set resolution, and event detail
-construction would be the highest-value targets.)
+- Add devDeps: `vitest`, and a DOM env (`jsdom` or `happy-dom`).
+- `package.json` scripts: `"test": "vitest run"`, `"test:watch": "vitest"`.
+- `vitest.config.ts` with `environment: 'jsdom'` (individual pure-module suites
+  can opt down to node via a per-file `// @vitest-environment node` docblock).
+- Wire `npm test` into `prepublishOnly` alongside typecheck + build.
+
+**Coverage (highest-value first):**
+
+_Pure / logic units — no DOM:_
+1. `defaultGateCategoryId()` resolution: explicit `gateCategory` wins → else
+   `analytics: true` category → else `'analytics'`.
+2. GPC-clamped-set resolution: no `gpc` flags → defaults to the default gate
+   category; some `gpc: true` → exactly those; `isGpcClamped(id)` correct for
+   members and non-members.
+3. `configureConsent` merge behavior for the new fields (arrays replace, new
+   scalar fields override).
+
+_Behavioral units — mocked `CookieConsent`, jsdom:_
+4. `hasConsent(categoryId)`: returns `acceptedCategory(id) && validConsent()`;
+   GPC hard-block applies **only** to clamped categories — `hasConsent('functionality')`
+   is unaffected by a GPC signal, `hasConsent('analytics')` is blocked (and is
+   respected again under `allowGpcOverride`).
+5. Aliases: `hasAnalyticsConsent()` === `hasConsent()` (default category).
+6. Event: `dispatchConsentChange` emits `consent:change` with correct `accepted`
+   and a `categories` map for every configured id;
+   `onConsentChange(h, 'functionality')` fires with the right boolean; the
+   `onAnalyticsConsentChange` alias reflects the default category.
+7. `[data-require-consent="…"]` / `[data-require-analytics]` delegated click:
+   prevents default and prompts when the named category lacks consent; no-ops
+   when consent is present.
+8. `setupConsentGate({ category })`: initial sync, auto-activate, click→prompt,
+   and teardown on withdrawal all key off the specified category.
+
+_Custom element — jsdom:_
+9. `<consent-embed category="functionality">`: stays inert (template not
+   stamped) without `functionality` consent; stamps into light DOM once that
+   category is granted; independent of `analytics` state.
+
+**Manual smoke (still worth doing, not a substitute):** a real two-category page
+(video → `functionality`, other embed → `analytics`) under a GPC signal to
+confirm the video loads while the analytics embed stays blocked.
