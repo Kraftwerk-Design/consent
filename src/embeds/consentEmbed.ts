@@ -1,4 +1,4 @@
-import { hasAnalyticsConsent } from '../analytics'
+import { hasConsent } from '../analytics'
 import { setupConsentGate, hide, show } from '../gate'
 
 /**
@@ -34,12 +34,14 @@ export function defineConsentEmbed(): void {
       if (this.wired) return
       this.wired = true
 
+      const category = this.getAttribute('category') ?? undefined
+
       const template = this.querySelector('template')
       const poster = this.querySelector<HTMLElement>('[data-poster]')
       let content: HTMLElement | null = null
 
       const activate = (): boolean => {
-        if (!hasAnalyticsConsent() || !template) return false
+        if (!hasConsent(category) || !template) return false
 
         if (!content) {
           content = document.createElement('div')
@@ -72,6 +74,7 @@ export function defineConsentEmbed(): void {
       }
 
       setupConsentGate({
+        category,
         activate,
         deactivate,
         triggers: [poster],
