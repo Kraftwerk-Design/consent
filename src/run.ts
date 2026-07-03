@@ -1,6 +1,6 @@
 import * as CookieConsent from 'vanilla-cookieconsent'
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
-import { dispatchAnalyticsConsentChange } from './analytics'
+import { dispatchConsentChange } from './analytics'
 import { buildEnglishCopy } from './copy/en'
 import { defaultGateCategoryId, getConsentConfig } from './config'
 import { hasGpcSignal } from './gpc'
@@ -83,16 +83,16 @@ export function runConsent(): Promise<void> {
     categories: buildCategories(gpcActive),
 
     onFirstConsent: () => {
-      dispatchAnalyticsConsentChange()
+      dispatchConsentChange()
       reloadIfNeeded()
     },
 
     onConsent: () => {
-      dispatchAnalyticsConsentChange()
+      dispatchConsentChange()
     },
 
     onChange: () => {
-      dispatchAnalyticsConsentChange()
+      dispatchConsentChange()
       reloadIfNeeded()
     },
 
@@ -106,6 +106,6 @@ export function runConsent(): Promise<void> {
   }).then(() => {
     applyGpcIfNeeded()
     showGpcBannerIfNeeded()
-    dispatchAnalyticsConsentChange()
+    dispatchConsentChange()
   })
 }

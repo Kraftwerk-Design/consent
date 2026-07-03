@@ -53,28 +53,52 @@ export const hasAnalyticsConsent = (): boolean => hasConsent()
 export const requireAnalyticsConsent = (): boolean => requireConsent()
 export const promptAnalyticsConsent = (): void => promptConsent()
 
-export function dispatchAnalyticsConsentChange(): void {
+export function dispatchConsentChange(): void {
+  const config = getConsentConfig()
+  const categories: Record<string, boolean> = {}
+  for (const category of config.categories) {
+    categories[category.id] = hasConsent(category.id)
+  }
+
   document.dispatchEvent(
-    new CustomEvent(getConsentConfig().consentChangeEvent, {
-      detail: { accepted: hasAnalyticsConsent() },
+    new CustomEvent(config.consentChangeEvent, {
+      detail: { accepted: hasConsent(), categories },
     }),
   )
 }
 
-/** Subscribe to analytics consent changes. Returns an unsubscribe function. */
-export function onAnalyticsConsentChange(
+/**
+ * Subscribe to consent changes. With `categoryId`, the handler receives that
+ * category's state; without it, the default gate category's. Returns an
+ * unsubscribe function.
+ */
+export function onConsentChange(
   handler: (accepted: boolean) => void,
+  categoryId?: string,
 ): () => void {
   const eventName = getConsentConfig().consentChangeEvent
-  const listener = (event: Event) => {
-    const accepted = (event as CustomEvent<{ accepted: boolean }>).detail
-      ?.accepted
+  const listener = (event: Event): void => {
+    const detail = (
+      event as CustomEvent<{
+        accepted: boolean
+        categories: Record<string, boolean>
+      }>
+    ).detail
+    const accepted =
+      categoryId === undefined
+        ? detail?.accepted
+        : detail?.categories?.[categoryId]
     handler(Boolean(accepted))
   }
 
   document.addEventListener(eventName, listener)
   return () => document.removeEventListener(eventName, listener)
 }
+
+/** Back-compat alias — the default gate category. */
+export const onAnalyticsConsentChange = (
+  handler: (accepted: boolean) => void,
+): (() => void) => onConsentChange(handler)
 
 /** Imperative consent API exposed on `window[windowNamespace]`. */
 export interface ConsentApi {
