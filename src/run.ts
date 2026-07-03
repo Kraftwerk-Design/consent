@@ -2,13 +2,17 @@ import * as CookieConsent from 'vanilla-cookieconsent'
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
 import { dispatchConsentChange } from './analytics'
 import { buildEnglishCopy } from './copy/en'
-import { defaultGateCategoryId, getConsentConfig } from './config'
+import {
+  gpcClampedCategoryIds,
+  isGpcClamped,
+  getConsentConfig,
+} from './config'
 import { hasGpcSignal } from './gpc'
 
 function isGpcCompliant(): boolean {
-  return (
-    CookieConsent.validConsent() &&
-    !CookieConsent.acceptedCategory(defaultGateCategoryId())
+  if (!CookieConsent.validConsent()) return false
+  return gpcClampedCategoryIds().every(
+    (id) => !CookieConsent.acceptedCategory(id),
   )
 }
 
@@ -34,7 +38,7 @@ function showGpcBannerIfNeeded(): void {
 }
 
 /** Build the vanilla-cookieconsent category map from config. */
-function buildCategories(
+export function buildCategories(
   gpcActive: boolean,
 ): CookieConsentConfig['categories'] {
   const categories: NonNullable<CookieConsentConfig['categories']> = {}
@@ -44,7 +48,9 @@ function buildCategories(
       enabled: category.enabled ?? false,
       readOnly:
         (category.readOnly ?? false) ||
-        (category.analytics === true && gpcActive && !getConsentConfig().allowGpcOverride),
+        (isGpcClamped(category.id) &&
+          gpcActive &&
+          !getConsentConfig().allowGpcOverride),
       ...(category.autoClear
         ? { autoClear: { cookies: category.autoClear } }
         : {}),
