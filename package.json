@@ -29,7 +29,9 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "preversion": "npm run typecheck",
     "postversion": "git push --follow-tags && gh release create v$npm_package_version --generate-notes",
     "release:patch": "npm version patch",
@@ -40,9 +42,11 @@
     "vanilla-cookieconsent": "^3.0.0"
   },
   "devDependencies": {
+    "jsdom": "^29.1.1",
     "tsdown": "latest",
     "typescript": "^5.5.0",
-    "vanilla-cookieconsent": "^3.1.0"
+    "vanilla-cookieconsent": "^3.1.0",
+    "vitest": "^4.1.9"
   },
   "license": "UNLICENSED",
   "private": false,
