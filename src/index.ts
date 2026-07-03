@@ -10,6 +10,10 @@ export type { ConsentCategory } from './config.default'
 export { hasGpcSignal } from './gpc'
 
 export {
+  hasConsent,
+  requireConsent,
+  promptConsent,
+  onConsentChange,
   hasAnalyticsConsent,
   promptAnalyticsConsent,
   requireAnalyticsConsent,
