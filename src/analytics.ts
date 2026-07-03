@@ -1,22 +1,35 @@
 import * as CookieConsent from 'vanilla-cookieconsent'
-import { defaultGateCategoryId, getConsentConfig } from './config'
+import {
+  defaultGateCategoryId,
+  isGpcClamped,
+  getConsentConfig,
+} from './config'
 import { hasGpcSignal } from './gpc'
 
-export function hasAnalyticsConsent(): boolean {
-  // GPC forces analytics off — unless the visitor is allowed to, and did,
-  // explicitly opt back in. In override mode fall through to the real consent
-  // check so a saved opt-in actually counts (otherwise gated embeds stay
-  // blocked and keep re-prompting after the user accepts).
-  if (hasGpcSignal() && !getConsentConfig().allowGpcOverride) return false
+/**
+ * Whether the given consent category is granted. GPC forces a *clamped*
+ * category off (unless the visitor opted back in under `allowGpcOverride`);
+ * unclamped categories are unaffected by GPC. Omit `categoryId` to check the
+ * default gate category.
+ */
+export function hasConsent(
+  categoryId: string = defaultGateCategoryId(),
+): boolean {
+  if (
+    isGpcClamped(categoryId) &&
+    hasGpcSignal() &&
+    !getConsentConfig().allowGpcOverride
+  ) {
+    return false
+  }
 
   return (
-    CookieConsent.validConsent() &&
-    CookieConsent.acceptedCategory(defaultGateCategoryId())
+    CookieConsent.validConsent() && CookieConsent.acceptedCategory(categoryId)
   )
 }
 
-/** Open consent UI when a gated embed is activated without analytics consent. */
-export function promptAnalyticsConsent(): void {
+/** Open the consent UI when a gated thing is activated without consent. */
+export function promptConsent(_categoryId?: string): void {
   if (!CookieConsent.validConsent()) {
     CookieConsent.show()
     return
@@ -25,13 +38,20 @@ export function promptAnalyticsConsent(): void {
   CookieConsent.showPreferences()
 }
 
-/** Returns true when analytics is allowed; otherwise opens the consent UI. */
-export function requireAnalyticsConsent(): boolean {
-  if (hasAnalyticsConsent()) return true
+/** True when the category is granted; otherwise opens the consent UI. */
+export function requireConsent(
+  categoryId: string = defaultGateCategoryId(),
+): boolean {
+  if (hasConsent(categoryId)) return true
 
-  promptAnalyticsConsent()
+  promptConsent(categoryId)
   return false
 }
+
+/** Back-compat aliases — the default gate category. */
+export const hasAnalyticsConsent = (): boolean => hasConsent()
+export const requireAnalyticsConsent = (): boolean => requireConsent()
+export const promptAnalyticsConsent = (): void => promptConsent()
 
 export function dispatchAnalyticsConsentChange(): void {
   document.dispatchEvent(
