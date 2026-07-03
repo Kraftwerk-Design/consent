@@ -1,5 +1,5 @@
 import * as CookieConsent from 'vanilla-cookieconsent'
-import { analyticsCategoryId, getConsentConfig } from './config'
+import { defaultGateCategoryId, getConsentConfig } from './config'
 import { hasGpcSignal } from './gpc'
 
 export function hasAnalyticsConsent(): boolean {
@@ -11,7 +11,7 @@ export function hasAnalyticsConsent(): boolean {
 
   return (
     CookieConsent.validConsent() &&
-    CookieConsent.acceptedCategory(analyticsCategoryId())
+    CookieConsent.acceptedCategory(defaultGateCategoryId())
   )
 }
 

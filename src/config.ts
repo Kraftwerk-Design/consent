@@ -23,10 +23,33 @@ export function getConsentConfig(): ConsentConfig {
   return resolved
 }
 
-/** Id of the consent-gated tracking category the gate helpers key off. */
-export function analyticsCategoryId(): string {
+/** Id of the category gate helpers target when a gate names none. */
+export function defaultGateCategoryId(): string {
   return (
+    resolved.gateCategory ??
     resolved.categories.find((category) => category.analytics)?.id ??
     'analytics'
   )
+}
+
+/**
+ * Category ids subject to the GPC clamp. If any category sets `gpc`, the set is
+ * exactly the categories with `gpc: true`; otherwise it defaults to the default
+ * gate category (the `analytics` one).
+ */
+export function gpcClampedCategoryIds(): string[] {
+  const anyGpcFlag = resolved.categories.some(
+    (category) => category.gpc !== undefined,
+  )
+  if (anyGpcFlag) {
+    return resolved.categories
+      .filter((category) => category.gpc)
+      .map((category) => category.id)
+  }
+  return [defaultGateCategoryId()]
+}
+
+/** Whether a category is subject to the GPC clamp. */
+export function isGpcClamped(categoryId: string): boolean {
+  return gpcClampedCategoryIds().includes(categoryId)
 }

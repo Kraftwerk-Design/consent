@@ -2,13 +2,13 @@ import * as CookieConsent from 'vanilla-cookieconsent'
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
 import { dispatchAnalyticsConsentChange } from './analytics'
 import { buildEnglishCopy } from './copy/en'
-import { analyticsCategoryId, getConsentConfig } from './config'
+import { defaultGateCategoryId, getConsentConfig } from './config'
 import { hasGpcSignal } from './gpc'
 
 function isGpcCompliant(): boolean {
   return (
     CookieConsent.validConsent() &&
-    !CookieConsent.acceptedCategory(analyticsCategoryId())
+    !CookieConsent.acceptedCategory(defaultGateCategoryId())
   )
 }
 
