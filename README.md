@@ -220,6 +220,28 @@ To gate individual content behind a different category:
   `requireConsent('functionality')`,
   `onConsentChange(handler, 'functionality')`
 
+For example, gating a third-party video player (one without its own facade —
+not YouTube/Vimeo) behind `functionality` instead of `analytics`: the click-to-
+play poster loads it once `functionality` consent is given, independent of the
+`analytics` category, and — because `functionality` isn't GPC-clamped — it still
+loads for a visitor sending a GPC signal:
+
+```html
+<consent-embed category="functionality">
+  <button data-poster>Play video</button>
+  <template>
+    <iframe
+      src="https://play.example-video.com/embed/abc123"
+      allow="autoplay; fullscreen; picture-in-picture"
+      loading="lazy"
+    ></iframe>
+  </template>
+</consent-embed>
+```
+
+Add `autoactivate` to load it immediately when `functionality` consent is
+already present instead of waiting for the poster click.
+
 Omitting the category everywhere reproduces the previous single-category
 behavior. The `hasAnalyticsConsent` / `requireAnalyticsConsent` /
 `promptAnalyticsConsent` / `onAnalyticsConsentChange` helpers remain as aliases
