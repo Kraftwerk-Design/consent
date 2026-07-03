@@ -102,6 +102,11 @@ export const onAnalyticsConsentChange = (
 
 /** Imperative consent API exposed on `window[windowNamespace]`. */
 export interface ConsentApi {
+  hasConsent: typeof hasConsent
+  requireConsent: typeof requireConsent
+  promptConsent: typeof promptConsent
+  onConsentChange: typeof onConsentChange
+  // Back-compat aliases (default gate category):
   hasAnalyticsConsent: typeof hasAnalyticsConsent
   requireAnalyticsConsent: typeof requireAnalyticsConsent
   promptAnalyticsConsent: typeof promptAnalyticsConsent
@@ -115,18 +120,22 @@ declare global {
   }
 }
 
-/** Delegated click gate for `[data-require-analytics]` links/buttons. */
-function handleRequireAnalyticsClick(event: MouseEvent): void {
-  const trigger = (event.target as Element | null)?.closest(
-    '[data-require-analytics]',
+/** Delegated click gate for `[data-require-consent]` / `[data-require-analytics]`. */
+function handleRequireConsentClick(event: MouseEvent): void {
+  const trigger = (event.target as Element | null)?.closest<HTMLElement>(
+    '[data-require-consent],[data-require-analytics]',
   )
 
   if (!trigger) return
-  if (hasAnalyticsConsent()) return
+
+  // `data-require-consent="functionality"` names a category; an empty value or
+  // the legacy `data-require-analytics` attribute means the default category.
+  const categoryId = trigger.dataset.requireConsent || defaultGateCategoryId()
+  if (hasConsent(categoryId)) return
 
   event.preventDefault()
   event.stopPropagation()
-  promptAnalyticsConsent()
+  promptConsent(categoryId)
 }
 
 let apiInitialized = false
@@ -143,6 +152,10 @@ export function initConsentApi(): void {
 
   const namespace = getConsentConfig().windowNamespace
   const api: ConsentApi = {
+    hasConsent,
+    requireConsent,
+    promptConsent,
+    onConsentChange,
     hasAnalyticsConsent,
     requireAnalyticsConsent,
     promptAnalyticsConsent,
@@ -150,5 +163,5 @@ export function initConsentApi(): void {
   }
   ;(window as unknown as Record<string, unknown>)[namespace] = api
 
-  document.addEventListener('click', handleRequireAnalyticsClick, true)
+  document.addEventListener('click', handleRequireConsentClick, true)
 }
