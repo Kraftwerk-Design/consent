@@ -131,7 +131,7 @@ automatically when consent is already present.
 
 ```html
 <!-- Google Map (pure iframe) -->
-<consent-embed>
+<consent-embed autoactivate>
   <button data-poster>Show map</button>
   <template>
     <iframe src="https://www.google.com/maps/embed?…" loading="lazy"></iframe>
