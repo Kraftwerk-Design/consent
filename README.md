@@ -112,23 +112,13 @@ categories: [
 **Direction follows `mode`** (via each category's `enabled` baseline):
 
 - **opt-out (CCPA):** `mode: 'opt-out'`, consent-gated categories `enabled: true`.
-  The `default` emits **granted**; opting out (or GPC) pushes an `update` flipping
-  the signals to `denied`. Tags usually load unblocked and `reloadOnConsentChange`
-  is off. Inline the same default in `<head>` above the GTM snippet so it is read
-  before the container loads:
-
-  ```html
-  <script>
-    window.dataLayer = window.dataLayer || []
-    function gtag(){ dataLayer.push(arguments) }
-    gtag('consent', 'default', {
-      analytics_storage: 'granted', ad_storage: 'granted',
-      ad_user_data: 'granted', ad_personalization: 'granted',
-      security_storage: 'granted', functionality_storage: 'granted',
-      wait_for_update: 500,
-    })
-  </script>
-  ```
+  The `default` emits **granted** for a fresh visitor; opting out (or GPC) pushes
+  an `update` flipping the signals to `denied`. Tags usually load unblocked and
+  `reloadOnConsentChange` is off. Inline the same default in `<head>` above the
+  GTM snippet so it is read before the container loads — use
+  [`renderGoogleConsentDefaultScript()`](#synchronous-head-default) so a returning
+  opted-out visitor defaults `denied` synchronously, with no dependency on the
+  async `update` landing inside `wait_for_update`.
 
 - **opt-in (prior consent):** `mode: 'opt-in'`, GTM tagged `type="text/plain"`.
   The `default` emits **denied**; opting in pushes an `update` granting the
@@ -136,10 +126,35 @@ categories: [
 
 **GPC is honored in both** — a GPC visitor's `analytics_storage`/`ad_*` come out
 `denied` by default in either mode. This holds **even under `allowGpcOverride`**:
-override only lets a *saved* opt-in later flip the signal to `granted` (via an
-`update`); the `default` command is denied for a GPC visitor regardless. The
-same rule governs the category's `enabled` state, so its `text/plain` tags stay
-blocked until that opt-in too.
+override only lets a *saved* opt-in flip the signal to `granted`; a GPC visitor
+with no saved opt-in defaults denied. The same rule governs the category's
+`enabled` state, so its `text/plain` tags stay blocked until that opt-in too.
+
+#### Synchronous `<head>` default
+
+The init-time `default` runs inside the deferred bundle — **after** any Google
+tag already in `<head>`. `renderGoogleConsentDefaultScript()` returns a
+`<script>` string to inline **above** the GTM/gtag snippet so a consent `default`
+is set before the container loads. Unlike a hand-authored snippet it is
+**cookie-aware and GPC-aware**, so a returning opted-out visitor gets `denied`
+*synchronously* — never granted-then-flipped:
+
+```ts
+import { renderGoogleConsentDefaultScript } from '@kraftwerkdesign/consent'
+
+// Framework-agnostic — emit the string server-side, above your GTM snippet.
+const headHtml = renderGoogleConsentDefaultScript()
+```
+
+The returned script reads `document.cookie` and `navigator.globalPrivacyControl`
+at **runtime**, so it stays correct per-visitor even served from a static/CDN
+cache — nothing about the visitor is baked in at render time. Its per-signal
+derivation matches the init-time `default` exactly (a parity test guarantees it):
+no saved cookie → the mode baseline; a valid saved cookie → the visitor's actual
+acceptance (OR-merged across categories); GPC → clamped signals `denied` unless a
+saved opt-in under `allowGpcOverride`. `readOnly` categories stay `granted`.
+Cookie parsing lives entirely in the package — consumers never touch the cookie
+JSON. Returns `''` when `googleConsentMode` is off.
 
 > **Signal mapping + GPC:** a signal is `granted` if **any** category mapping it
 > is granted (OR). If you map one Google signal (e.g. `ad_storage`) to both a

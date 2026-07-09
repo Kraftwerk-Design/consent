@@ -27,6 +27,8 @@ export type { ConsentGate } from './gate'
 
 export { runConsent } from './run'
 
+export { renderGoogleConsentDefaultScript } from './googleConsentMode'
+
 export { defineConsentEmbed, defineConsentPour } from './embeds/index'
 
 /**

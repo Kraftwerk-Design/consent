@@ -28,6 +28,17 @@ function lastCommand(name: string): Record<string, unknown> | undefined {
     : undefined
 }
 
+const COOKIE_NAME = 'kd_cookie_consent'
+
+/** Write a vanilla-cookieconsent-shaped cookie for the given accepted set. */
+function setSavedConsent(categories: string[]): void {
+  const value = encodeURIComponent(JSON.stringify({ categories, revision: 0 }))
+  document.cookie = `${COOKIE_NAME}=${value}`
+}
+function clearSavedConsent(): void {
+  document.cookie = `${COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 GMT`
+}
+
 const NECESSARY: ConsentCategory = {
   id: 'necessary',
   enabled: true,
@@ -48,11 +59,13 @@ const ANALYTICS: ConsentCategory = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(hasGpcSignal).mockReturnValue(false)
+  clearSavedConsent()
   delete (window as W).dataLayer
   delete (window as W).gtag
 })
 
 afterEach(() => {
+  clearSavedConsent()
   delete (window as W).dataLayer
   delete (window as W).gtag
 })
@@ -159,6 +172,72 @@ describe('pushGoogleConsentDefault', () => {
     })
     pushGoogleConsentDefault()
     expect(lastCommand('default')!.analytics_storage).toBe('granted')
+  })
+
+  it('opt-out: a returning opted-out visitor defaults denied (cookie-aware)', () => {
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-out',
+      categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
+    })
+    setSavedConsent(['necessary']) // analytics declined
+    pushGoogleConsentDefault()
+    const d = lastCommand('default')!
+    expect(d.analytics_storage).toBe('denied')
+    expect(d.ad_storage).toBe('denied')
+    expect(d.security_storage).toBe('granted') // readOnly stays granted
+  })
+
+  it('opt-in: a returning opted-in visitor defaults granted (cookie-aware)', () => {
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-in',
+      categories: [NECESSARY, ANALYTICS],
+    })
+    setSavedConsent(['necessary', 'analytics'])
+    pushGoogleConsentDefault()
+    const d = lastCommand('default')!
+    expect(d.analytics_storage).toBe('granted')
+    expect(d.ad_user_data).toBe('granted')
+  })
+
+  it('a saved opt-in under allowGpcOverride defaults granted despite GPC', () => {
+    vi.mocked(hasGpcSignal).mockReturnValue(true)
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-in',
+      allowGpcOverride: true,
+      categories: [NECESSARY, ANALYTICS],
+    })
+    setSavedConsent(['necessary', 'analytics'])
+    pushGoogleConsentDefault()
+    expect(lastCommand('default')!.analytics_storage).toBe('granted')
+  })
+
+  it('a saved opt-in is ignored under GPC without allowGpcOverride', () => {
+    vi.mocked(hasGpcSignal).mockReturnValue(true)
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-in',
+      allowGpcOverride: false,
+      categories: [NECESSARY, ANALYTICS],
+    })
+    setSavedConsent(['necessary', 'analytics'])
+    pushGoogleConsentDefault()
+    expect(lastCommand('default')!.analytics_storage).toBe('denied')
+  })
+
+  it('forces a readOnly category granted even if a stale cookie omits it', () => {
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-in',
+      categories: [NECESSARY, ANALYTICS],
+    })
+    setSavedConsent(['analytics']) // stale: predates necessary being saved
+    pushGoogleConsentDefault()
+    const d = lastCommand('default')!
+    expect(d.security_storage).toBe('granted')
+    expect(d.functionality_storage).toBe('granted')
   })
 
   it('reuses an existing gtag/dataLayer instead of replacing it', () => {
