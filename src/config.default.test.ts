@@ -50,3 +50,14 @@ describe('googleConsentMode defaults', () => {
     ])
   })
 })
+
+describe('Meta Pixel consent config', () => {
+  it('defaults metaPixelConsentMode to false', () => {
+    expect(defaultConsentConfig.metaPixelConsentMode).toBe(false)
+  })
+
+  it('flags the default analytics category with meta: true', () => {
+    const analytics = defaultConsentConfig.categories.find((c) => c.analytics)
+    expect(analytics?.meta).toBe(true)
+  })
+})

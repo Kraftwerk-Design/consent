@@ -47,6 +47,8 @@ export interface ConsentCategory {
    * clamped set defaults to the default gate category (the `analytics` one).
    */
   gpc?: boolean
+  /** Grants the Meta Pixel when this category is consented (binary). */
+  meta?: boolean
   /** Cookies cleared when this category is opted out of. */
   autoClear?: AutoClearCookie[]
   /** Google Consent Mode v2 signals this category grants when consented. */
@@ -108,6 +110,18 @@ export interface ConsentConfig {
    * default to denied. GPC forces the clamped signals denied either way.
    */
   googleConsentMode: boolean
+  /**
+   * Enable Meta Pixel consent signaling. Off when omitted. Grants/revokes the
+   * pixel (`fbq('consent', …)`) from each category's `meta` flag on consent
+   * change. Direction follows `mode`: opt-in starts revoked and grants on
+   * consent; opt-out starts granted and, on opt-out, applies Limited Data Use
+   * (LDU) *and* revokes. GPC forces the clamped categories off either way.
+   * The library manages the live session only — it cannot suppress the
+   * page-load PageView (set the pre-`fbq('init')` state inline in `<head>`; see
+   * README). The pixel base code must load before initConsent() — the library
+   * never injects or stubs `fbq`.
+   */
+  metaPixelConsentMode: boolean
   guiOptions: CookieConsentConfig['guiOptions']
   /**
    * Override the banner/preferences copy wholesale. Defaults to the built-in
@@ -139,6 +153,7 @@ export const defaultConsentConfig: ConsentConfig = {
     {
       id: 'analytics',
       analytics: true,
+      meta: true,
       google: [
         'analytics_storage',
         'ad_storage',
@@ -171,6 +186,8 @@ export const defaultConsentConfig: ConsentConfig = {
   reloadOnConsentChange: true,
 
   googleConsentMode: false,
+
+  metaPixelConsentMode: false,
 
   guiOptions: {
     consentModal: {
