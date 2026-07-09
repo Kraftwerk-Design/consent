@@ -1,6 +1,7 @@
 # Google Consent Mode v2 (optional) — design
 
-**Date:** 2026-07-03
+**Date:** 2026-07-03 (revised 2026-07-08: retargeted to CCPA opt-out; default
+command is now mode-aware)
 **Status:** Approved
 
 ## Problem
@@ -11,19 +12,35 @@ protocol: `gtag('consent', 'default'|'update', { …signals })` tells Google tag
 whether they may use storage/identifiers. It is optional — most sites won't
 enable it — so it must be strictly additive and off by default.
 
-### Compliance framing (CPRA + CIPA)
+### Compliance framing (CCPA opt-out, and opt-in still supported)
 
-Consent Mode's headline feature, **modeling**, requires the Google tag to load
-and send cookieless "pings" **for every visitor, including before consent** —
-which still transmits IP/user-agent to Google at page load. That is precisely
-the pattern CIPA plaintiffs target, so it is **not** the default posture here.
+The primary target is now **CCPA opt-out**: for California adults a business may
+process/share personal info **by default**, offering a "Do Not Sell/Share"
+opt-out and honoring **GPC** as a binding opt-out signal. That is the opposite of
+a prior-consent (opt-in) regime — under opt-out, Google tags may load and run by
+default and consent is *withdrawn* on opt-out or GPC.
 
-This library ships **Posture A** only: analytics/GTM stays blocked until opt-in
-(the existing `type="text/plain"` + reload model), and Consent Mode is layered
-on top purely as **signals**, so Google tags behave correctly once they load and
-GPC forces the relevant signals to `denied`. Modeling (**Posture B**: unblocked
-GTM) is reachable *later* with no library change — see "A → B path" — but is a
-per-site compliance decision, not something this feature encourages.
+The library must not hardcode one regime. It already carries `mode: 'opt-in' |
+'opt-out'` and per-category `enabled`; Consent Mode rides on top of that:
+
+- **opt-out (CCPA):** the `default` command emits **granted** for the mapped
+  signals (per each category's `enabled` state), and `update` flips them to
+  `denied` when the visitor opts out or GPC is present. Tags typically load
+  unblocked; `reloadOnConsentChange` is usually off.
+- **opt-in (CPRA + CIPA style):** the `default` command emits **denied**, and
+  `update` grants on opt-in. This pairs with the existing `type="text/plain"` +
+  reload blocking model.
+
+**GPC is the through-line in both:** because signals derive from the same
+consent state the rest of the library uses (`hasConsent`, which honors the GPC
+clamp), a GPC visitor's `analytics_storage` / `ad_*` come out `denied`
+regardless of mode — and under CCPA that is a binding opt-out, so it matters
+more, not less.
+
+The blocking/loading of GTM itself stays the **consumer's** choice (how the GTM
+snippet is tagged). The library only manages *signals*; it never blocks or
+unblocks tags. Whether a site is opt-in-blocked or opt-out-unblocked is a config
++ markup decision, not library code.
 
 ## Decision
 
@@ -54,10 +71,11 @@ without changing the mapping model.
 interface ConsentConfig {
   // …existing…
   /**
-   * Enable Google Consent Mode v2 signaling (Posture A: signals only; GTM stays
-   * blocked until opt-in). Off when omitted. Pushes a default-denied consent
-   * state at init and a consent 'update' on every change, mapped from each
-   * category's `google` signals.
+   * Enable Google Consent Mode v2 signaling. Off when omitted. Pushes a consent
+   * `default` at init and a consent `update` on every change, mapped from each
+   * category's `google` signals. Direction follows `mode`: opt-out defaults to
+   * granted (CCPA); opt-in defaults to denied. GPC forces the clamped signals
+   * denied either way.
    */
   googleConsentMode: boolean
 }
@@ -96,24 +114,39 @@ Default categories ship with a sensible (inert unless enabled) mapping:
 
 ## Behavior
 
-### Signal derivation (single rule for default *and* update)
+### Signal derivation
 
 - **Managed set** = the union of every category's `google` array. Signals never
   mapped are left unmanaged (never pushed).
-- For each managed signal `S`: `'granted'` if **any category that maps `S` is
-  currently consented** (`hasConsent(category.id)`), else `'denied'`.
-- Because `hasConsent` already honors the GPC clamp, a GPC visitor's
-  `analytics_storage` / `ad_*` come out `denied` automatically — no special
-  casing. "Always granted" signals (e.g. `security_storage`) fall out naturally
-  from mapping them to the always-consented `necessary` category.
+- A signal is `'granted'` if **any category that maps it counts as granted**,
+  else `'denied'`. What "granted" means differs between the two commands:
+
+  - **`update`** (a real, recorded choice): a category is granted iff
+    `hasConsent(category.id)` — the same GPC-honoring check the rest of the
+    library uses. This is unchanged by mode.
+  - **`default`** (first load, *before* any recorded choice): must be
+    **mode-aware**, because `hasConsent` is `false` pre-interaction in *both*
+    modes (`validConsent()` is false until a choice is saved) — a naive derive
+    would wrongly emit `denied` for an opt-out site. So the default uses:
+    - **opt-out:** a category is granted iff it is `enabled` (its opt-out
+      baseline) **and not GPC-clamped-off** — i.e. `granted` unless GPC (or an
+      already-saved opt-out) applies.
+    - **opt-in:** `denied` for every consent-gated category (only always-on
+      `necessary`-mapped signals like `security_storage` are `granted`).
+- GPC is applied in the default too: a GPC-clamped category is forced `denied`
+  regardless of mode/`enabled` (unless `allowGpcOverride`), mirroring
+  `buildCategories()` / `isGpcClamped()` in `run.ts`.
+- "Always granted" signals (e.g. `security_storage`) need no special case — they
+  fall out of mapping them to the always-on `necessary` category.
 
 ### Commands
 
-- **Default** — `gtag('consent', 'default', { …managed signals from initial
-  state…, wait_for_update: 500 })`, pushed once at the top of `runConsent()`
-  (before `CookieConsent.run`). In Posture A, GTM is blocked until consent, so
-  this is trivially early; for Posture B the consumer additionally inlines the
-  same default in `<head>` above GTM.
+- **Default** — `gtag('consent', 'default', { …managed signals per the
+  mode-aware rule…, wait_for_update: 500 })`, pushed once at the top of
+  `runConsent()` (before `CookieConsent.run`). When the site blocks GTM until a
+  choice (opt-in), this is trivially early; when GTM loads unblocked (opt-out),
+  the consumer additionally inlines the same default in `<head>` above GTM so it
+  is read before the container.
 - **Update** — `gtag('consent', 'update', { …managed signals from current
   state… })`, pushed wherever `dispatchConsentChange()` fires today:
   `onFirstConsent`, `onConsent`, `onChange`, and the post-`applyGpcIfNeeded()`
@@ -146,16 +179,21 @@ Both read `getConsentConfig()` and `hasConsent()` internally, so `run.ts` only
 gains three or four one-line calls and the signal/mapping logic stays out of the
 run wiring. Unit-tested against a fake `window.dataLayer`.
 
-## A → B path (later, no library change)
+## Load model follows `mode` (config/markup, no library change)
 
-A site moves from signals-only to modeling by config/markup alone:
+The same `googleConsentMode: true` serves both regimes; which one a site runs is
+a config + markup decision the library doesn't encode:
 
-1. Un-block the GTM snippet (drop `type="text/plain"` / server re-tagging).
-2. Inline the default-denied `gtag('consent','default',…)` in `<head>` above
-   GTM (documented snippet).
-3. Set `reloadOnConsentChange: false`.
+- **CCPA opt-out (load by default):** `mode: 'opt-out'`, categories `enabled:
+  true`, GTM snippet **not** blocked, inline the (mode-aware, granted) default in
+  `<head>` above GTM, and `reloadOnConsentChange: false`. Opt-out / GPC push an
+  `update` flipping signals to `denied`.
+- **Opt-in (block until choice):** `mode: 'opt-in'`, GTM tagged
+  `type="text/plain"`, default emits `denied`, `update` grants on opt-in, and
+  the existing reload re-activates blocked tags.
 
-Same `googleConsentMode: true` drives both postures.
+The library's job is identical in both — emit the mode-correct signals; it never
+blocks or unblocks the tag itself.
 
 ## Files
 
@@ -168,7 +206,8 @@ Same `googleConsentMode: true` drives both postures.
   pair `pushGoogleConsentUpdate()` with each `dispatchConsentChange()`
 - `src/index.ts` — export the `GoogleConsentSignal` type
 - `README.md` — `googleConsentMode` row in the config table + a "Google Consent
-  Mode" subsection (Posture A, CIPA note, mapping, A→B path)
+  Mode" subsection (CCPA opt-out vs opt-in, mode-aware default, per-category
+  mapping, GPC note, load-model config)
 
 ## Tests
 
@@ -177,22 +216,26 @@ suites do; assert against `window.dataLayer`.
 
 1. **Off:** feature omitted/false → no pushes at init or on change; `dataLayer`
    untouched.
-2. **Default at init:** enabled → a `['consent','default',{…}]` entry with
+2. **Default, opt-in mode:** `mode: 'opt-in'` → `['consent','default',{…}]` with
    `analytics_storage`/`ad_*` `denied`, `security_storage`/`functionality_storage`
-   `granted` (from `necessary`), and `wait_for_update: 500`.
-3. **Update on grant:** granting analytics → a `['consent','update',{…}]` entry
-   flipping `analytics_storage` + the ad signals to `granted`.
-4. **GPC honored:** GPC signal present → analytics/ad signals stay `denied` in
-   both default and update despite acceptance state.
-5. **Managed set:** only mapped signals appear; unmapped signals never pushed.
-6. **dataLayer reuse:** a pre-existing `window.dataLayer` / `gtag` is reused, not
+   `granted` (from always-on `necessary`), and `wait_for_update: 500`.
+3. **Default, opt-out mode:** `mode: 'opt-out'`, analytics `enabled: true` →
+   default emits `analytics_storage`/`ad_*` **`granted`** at first load (pre-
+   interaction), reflecting the opt-out baseline.
+4. **Update on choice:** recording a choice → `['consent','update',{…}]` with
+   signals from `hasConsent()` (grant on opt-in; deny on opt-out).
+5. **GPC honored in both modes:** GPC signal present → analytics/ad signals stay
+   `denied` in the default **even in opt-out mode** (binding opt-out) and in the
+   update, unless `allowGpcOverride`.
+6. **Managed set:** only mapped signals appear; unmapped signals never pushed.
+7. **dataLayer reuse:** a pre-existing `window.dataLayer` / `gtag` is reused, not
    replaced; pushes use the `arguments` form.
 
 ## Out of scope
 
 - Options object (`ads_data_redaction`, `url_passthrough`, region targeting,
   configurable `alwaysGranted`/`waitForUpdate`) — a later, additive change.
-- Posture B automation (un-blocking GTM, emitting the head snippet) — handled by
-  the consumer via config/markup, documented but not code.
+- Automating the load model (un-blocking GTM, emitting the head snippet) —
+  handled by the consumer via config/markup, documented but not code.
 - Central `analytics → [signals]` mapping — rejected in favor of per-category
   `google` for consistency with existing category flags.
