@@ -1,20 +1,8 @@
 import { hasConsent } from './analytics'
-import { getConsentConfig, isGpcClamped } from './config'
+import { getConsentConfig, gpcClampedOff } from './config'
 import type { ConsentCategory } from './config.default'
-import { hasGpcSignal } from './gpc'
 
 type ConsentSignalState = 'granted' | 'denied'
-
-/**
- * True when GPC forces this category off by default. Independent of
- * `allowGpcOverride` — override governs the toggle/persistence, not the
- * default-off state — mirroring the `enabled` downgrade in run.ts
- * `buildCategories`. So the Consent Mode `default` signals `denied` for a GPC
- * visitor even under override; a saved opt-in later flips it via `update`.
- */
-function gpcClampedOff(categoryId: string): boolean {
-  return isGpcClamped(categoryId) && hasGpcSignal()
-}
 
 /**
  * Build the managed-signal map. `granted` decides, per category, whether that

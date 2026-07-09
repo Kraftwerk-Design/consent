@@ -1,5 +1,6 @@
 import { deepMerge } from './deepMerge'
 import { defaultConsentConfig, type ConsentConfig } from './config.default'
+import { hasGpcSignal } from './gpc'
 
 export type { ConsentConfig } from './config.default'
 
@@ -52,4 +53,14 @@ export function gpcClampedCategoryIds(): string[] {
 /** Whether a category is subject to the GPC clamp. */
 export function isGpcClamped(categoryId: string): boolean {
   return gpcClampedCategoryIds().includes(categoryId)
+}
+
+/**
+ * True when GPC forces this category off by default. Independent of
+ * `allowGpcOverride` — override governs the toggle/persistence, not the
+ * default-off state — mirroring the `enabled` downgrade in run.ts
+ * `buildCategories`. Consumed by both consent-mode modules.
+ */
+export function gpcClampedOff(categoryId: string): boolean {
+  return isGpcClamped(categoryId) && hasGpcSignal()
 }
