@@ -43,6 +43,7 @@ Overridable settings:
 | `allowGpcOverride` | Let visitors opt back into analytics despite a GPC signal — GPC becomes an overridable default rather than a hard lock (default `false`). See the [GPC note](#notes) |
 | `windowNamespace` | Global namespace object for the imperative API (default `KDConsent`) |
 | `reloadOnConsentChange` | Reload on non-GPC consent change so blocked scripts activate (default `true`) |
+| `googleConsentMode` | Emit Google Consent Mode v2 signals (`default` at init, `update` on change), mapped from each category's `google` list. Off by default. See [Google Consent Mode](#google-consent-mode-v2-optional). |
 | `buildCopy` | Override banner/preferences copy wholesale (optional) |
 
 Any field of `ConsentConfig` is overridable, including `mode` and `guiOptions`
@@ -87,6 +88,54 @@ and `runConsent()`.
   {% endfor %}
 {% endif %}  
 ```
+
+### Google Consent Mode v2 (optional)
+
+Off by default. Set `googleConsentMode: true` to feed consent state into Google's
+tags (GA4 / Google Ads via GTM) as Consent Mode signals. The library pushes a
+`gtag('consent','default',…)` at init and a `gtag('consent','update',…)` on every
+change; it reuses the page's `dataLayer`/`gtag` and never blocks or unblocks the
+tag itself.
+
+Map each category to the signals it grants with a `google` array:
+
+```ts
+categories: [
+  { id: 'necessary', enabled: true, readOnly: true,
+    google: ['security_storage', 'functionality_storage'] },
+  { id: 'analytics', analytics: true,
+    google: ['analytics_storage', 'ad_storage', 'ad_user_data', 'ad_personalization'] },
+]
+```
+
+**Direction follows `mode`** (via each category's `enabled` baseline):
+
+- **opt-out (CCPA):** `mode: 'opt-out'`, consent-gated categories `enabled: true`.
+  The `default` emits **granted**; opting out (or GPC) pushes an `update` flipping
+  the signals to `denied`. Tags usually load unblocked and `reloadOnConsentChange`
+  is off. Inline the same default in `<head>` above the GTM snippet so it is read
+  before the container loads:
+
+  ```html
+  <script>
+    window.dataLayer = window.dataLayer || []
+    function gtag(){ dataLayer.push(arguments) }
+    gtag('consent', 'default', {
+      analytics_storage: 'granted', ad_storage: 'granted',
+      ad_user_data: 'granted', ad_personalization: 'granted',
+      security_storage: 'granted', functionality_storage: 'granted',
+      wait_for_update: 500,
+    })
+  </script>
+  ```
+
+- **opt-in (prior consent):** `mode: 'opt-in'`, GTM tagged `type="text/plain"`.
+  The `default` emits **denied**; opting in pushes an `update` granting the
+  signals, and the existing reload re-activates the blocked tag.
+
+**GPC is honored in both** — a GPC visitor's `analytics_storage`/`ad_*` come out
+`denied` regardless of mode (unless `allowGpcOverride`), because signals derive
+from the same consent state the rest of the library uses.
 
 ### 5. Gate embeds & widgets
 
