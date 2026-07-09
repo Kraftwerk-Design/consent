@@ -25,10 +25,11 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false # never cache in release builds
 
-      # Trusted publishing requires npm >= 11.5.1; guarantee it regardless of
-      # the version bundled with Node.
-      - name: Ensure npm supports trusted publishing
-        run: npm install -g npm@latest
+      # Node 24 bundles npm 11.x, which supports OIDC trusted publishing.
+      # We intentionally do NOT self-upgrade npm here: `npm install -g npm@latest`
+      # intermittently corrupts the in-place install on the runners, leaving
+      # libnpmpublish without its `sigstore` dep and failing publish with
+      # "Cannot find module 'sigstore'".
 
       - name: Install dependencies
         run: npm ci
