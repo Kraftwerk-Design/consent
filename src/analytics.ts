@@ -23,9 +23,16 @@ export function hasConsent(
     return false
   }
 
-  return (
-    CookieConsent.validConsent() && CookieConsent.acceptedCategory(categoryId)
-  )
+  // In opt-out mode a default-enabled category counts as consented before the
+  // visitor interacts — `validConsent()` stays false until a choice is saved,
+  // but the category is already accepted (and its `text/plain` tags already
+  // fire). Requiring `validConsent()` here would strand JS-gated embeds
+  // (`<consent-embed autoactivate>`, `lite-youtube` consentReady) on their
+  // opted-out placeholder while scripts track. Opt-in is unchanged.
+  const validByDefault =
+    CookieConsent.validConsent() || getConsentConfig().mode === 'opt-out'
+
+  return validByDefault && CookieConsent.acceptedCategory(categoryId)
 }
 
 /** Open the consent UI when a gated thing is activated without consent. */

@@ -47,3 +47,43 @@ describe('buildCategories GPC clamp', () => {
     expect(cats!.marketing.readOnly).toBe(true)
   })
 })
+
+describe('buildCategories GPC enabled downgrade', () => {
+  it('forces a clamped category off by default under GPC even with allowGpcOverride', () => {
+    configureConsent({
+      mode: 'opt-out',
+      allowGpcOverride: true,
+      categories: [
+        { id: 'necessary', enabled: true, readOnly: true },
+        { id: 'analytics', analytics: true, enabled: true },
+      ],
+    })
+    const cats = buildCategories(true) // gpcActive
+    expect(cats!.analytics.enabled).toBe(false) // off by default…
+    expect(cats!.analytics.readOnly).toBe(false) // …but the toggle stays operable
+  })
+
+  it('forces a clamped category off and locked under GPC without override', () => {
+    configureConsent({
+      mode: 'opt-out',
+      allowGpcOverride: false,
+      categories: [
+        { id: 'necessary', enabled: true, readOnly: true },
+        { id: 'analytics', analytics: true, enabled: true },
+      ],
+    })
+    const cats = buildCategories(true)
+    expect(cats!.analytics.enabled).toBe(false)
+    expect(cats!.analytics.readOnly).toBe(true)
+  })
+
+  it('leaves an enabled category on by default when GPC is inactive', () => {
+    configureConsent({
+      mode: 'opt-out',
+      allowGpcOverride: true,
+      categories: [{ id: 'analytics', analytics: true, enabled: true }],
+    })
+    const cats = buildCategories(false)
+    expect(cats!.analytics.enabled).toBe(true)
+  })
+})

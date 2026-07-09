@@ -68,6 +68,41 @@ describe('hasConsent', () => {
   })
 })
 
+describe('hasConsent opt-out mode', () => {
+  it('treats a default-enabled category as consented before interaction', () => {
+    configureConsent({
+      mode: 'opt-out',
+      allowGpcOverride: false,
+      categories: [{ id: 'analytics', analytics: true, enabled: true }],
+    })
+    vi.mocked(CookieConsent.validConsent).mockReturnValue(false) // fresh visit
+    accepted('analytics') // opt-out default-accepts enabled categories
+    expect(hasConsent('analytics')).toBe(true)
+  })
+
+  it('still requires a recorded choice in opt-in mode', () => {
+    configureConsent({
+      mode: 'opt-in',
+      categories: [{ id: 'analytics', analytics: true }],
+    })
+    vi.mocked(CookieConsent.validConsent).mockReturnValue(false)
+    accepted('analytics')
+    expect(hasConsent('analytics')).toBe(false)
+  })
+
+  it('opt-out + GPC (no override) stays off before interaction', () => {
+    configureConsent({
+      mode: 'opt-out',
+      allowGpcOverride: false,
+      categories: [{ id: 'analytics', analytics: true, enabled: true }],
+    })
+    vi.mocked(CookieConsent.validConsent).mockReturnValue(false)
+    vi.mocked(hasGpcSignal).mockReturnValue(true)
+    accepted('analytics')
+    expect(hasConsent('analytics')).toBe(false) // GPC clamp beats the opt-out default
+  })
+})
+
 describe('requireConsent', () => {
   it('returns true and does not prompt when consent is present', () => {
     accepted('analytics')

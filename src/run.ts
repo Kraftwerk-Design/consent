@@ -48,13 +48,18 @@ export function buildCategories(
   const categories: NonNullable<CookieConsentConfig['categories']> = {}
 
   for (const category of getConsentConfig().categories) {
+    // GPC forces a clamped category off by default whenever a signal is present
+    // — regardless of `allowGpcOverride`. Override only governs whether the
+    // toggle stays operable (readOnly below) and whether a saved opt-in persists
+    // via the cookie; it must not leave the category on-by-default for a GPC
+    // visitor (which would fire opt-out `enabled: true` tags against the signal).
+    const gpcClamped = isGpcClamped(category.id) && gpcActive
+
     categories[category.id] = {
-      enabled: category.enabled ?? false,
+      enabled: gpcClamped ? false : (category.enabled ?? false),
       readOnly:
         (category.readOnly ?? false) ||
-        (isGpcClamped(category.id) &&
-          gpcActive &&
-          !getConsentConfig().allowGpcOverride),
+        (gpcClamped && !getConsentConfig().allowGpcOverride),
       ...(category.autoClear
         ? { autoClear: { cookies: category.autoClear } }
         : {}),

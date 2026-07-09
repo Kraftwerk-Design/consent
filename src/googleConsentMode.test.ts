@@ -108,6 +108,22 @@ describe('pushGoogleConsentDefault', () => {
     expect(d.security_storage).toBe('granted') // necessary not clamped
   })
 
+  it('GPC forces clamped signals denied in the default even with allowGpcOverride', () => {
+    vi.mocked(hasGpcSignal).mockReturnValue(true)
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-out',
+      allowGpcOverride: true,
+      categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
+    })
+    pushGoogleConsentDefault()
+    const d = lastCommand('default')!
+    // Override governs whether the toggle stays operable / a saved opt-in
+    // persists — NOT the default-off state. A GPC visitor must default denied.
+    expect(d.analytics_storage).toBe('denied')
+    expect(d.security_storage).toBe('granted')
+  })
+
   it('only pushes mapped signals', () => {
     configureConsent({
       googleConsentMode: true,
