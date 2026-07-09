@@ -5,7 +5,7 @@ import { runConsent } from './run'
 
 export { getConsentConfig, configureConsent } from './config'
 export type { ConsentConfig } from './config'
-export type { ConsentCategory } from './config.default'
+export type { ConsentCategory, GoogleConsentSignal } from './config.default'
 
 export { hasGpcSignal } from './gpc'
 

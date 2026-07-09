@@ -1,5 +1,15 @@
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
 
+/** A Google Consent Mode v2 signal. */
+export type GoogleConsentSignal =
+  | 'ad_storage'
+  | 'ad_user_data'
+  | 'ad_personalization'
+  | 'analytics_storage'
+  | 'functionality_storage'
+  | 'personalization_storage'
+  | 'security_storage'
+
 /** A cookie a category clears on opt-out. */
 export interface AutoClearCookie {
   name: string | RegExp
@@ -39,6 +49,8 @@ export interface ConsentCategory {
   gpc?: boolean
   /** Cookies cleared when this category is opted out of. */
   autoClear?: AutoClearCookie[]
+  /** Google Consent Mode v2 signals this category grants when consented. */
+  google?: GoogleConsentSignal[]
   /** Preferences-modal section copy. Add copy here when adding a category. */
   copy?: CategoryCopy
 }
@@ -87,6 +99,15 @@ export interface ConsentConfig {
    * sites that rely on the live `onAnalyticsConsentChange` listeners instead.
    */
   reloadOnConsentChange: boolean
+  /**
+   * Enable Google Consent Mode v2 signaling. Off when omitted/false. Pushes a
+   * consent `default` at init and a consent `update` on every change, mapped
+   * from each category's `google` signals. Direction follows `mode` via each
+   * category's `enabled` baseline: opt-out categories (`enabled: true`) default
+   * to granted (CCPA); opt-in consent-gated categories (`enabled: false`)
+   * default to denied. GPC forces the clamped signals denied either way.
+   */
+  googleConsentMode: boolean
   guiOptions: CookieConsentConfig['guiOptions']
   /**
    * Override the banner/preferences copy wholesale. Defaults to the built-in
@@ -108,6 +129,7 @@ export const defaultConsentConfig: ConsentConfig = {
       id: 'necessary',
       enabled: true,
       readOnly: true,
+      google: ['security_storage', 'functionality_storage'],
       copy: {
         title: 'Strictly necessary',
         description:
@@ -117,6 +139,12 @@ export const defaultConsentConfig: ConsentConfig = {
     {
       id: 'analytics',
       analytics: true,
+      google: [
+        'analytics_storage',
+        'ad_storage',
+        'ad_user_data',
+        'ad_personalization',
+      ],
       autoClear: [
         { name: /^_ga/ },
         { name: '_gid' },
@@ -141,6 +169,8 @@ export const defaultConsentConfig: ConsentConfig = {
   windowNamespace: 'KDConsent',
 
   reloadOnConsentChange: true,
+
+  googleConsentMode: false,
 
   guiOptions: {
     consentModal: {

@@ -28,3 +28,25 @@ describe('config defaults', () => {
     ).toBe(true)
   })
 })
+
+describe('googleConsentMode defaults', () => {
+  it('is off by default', () => {
+    expect(defaultConsentConfig.googleConsentMode).toBe(false)
+  })
+
+  it('maps default categories to Consent Mode signals', () => {
+    const byId = Object.fromEntries(
+      defaultConsentConfig.categories.map((c) => [c.id, c]),
+    )
+    expect(byId.necessary.google).toEqual([
+      'security_storage',
+      'functionality_storage',
+    ])
+    expect(byId.analytics.google).toEqual([
+      'analytics_storage',
+      'ad_storage',
+      'ad_user_data',
+      'ad_personalization',
+    ])
+  })
+})
