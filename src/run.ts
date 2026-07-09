@@ -8,6 +8,10 @@ import {
   getConsentConfig,
 } from './config'
 import { hasGpcSignal } from './gpc'
+import {
+  pushGoogleConsentDefault,
+  pushGoogleConsentUpdate,
+} from './googleConsentMode'
 
 function isGpcCompliant(): boolean {
   if (!CookieConsent.validConsent()) return false
@@ -75,6 +79,8 @@ export function runConsent(): Promise<void> {
     window.location.reload()
   }
 
+  pushGoogleConsentDefault()
+
   return CookieConsent.run({
     mode: config.mode,
 
@@ -90,15 +96,18 @@ export function runConsent(): Promise<void> {
 
     onFirstConsent: () => {
       dispatchConsentChange()
+      pushGoogleConsentUpdate()
       reloadIfNeeded()
     },
 
     onConsent: () => {
       dispatchConsentChange()
+      pushGoogleConsentUpdate()
     },
 
     onChange: () => {
       dispatchConsentChange()
+      pushGoogleConsentUpdate()
       reloadIfNeeded()
     },
 
@@ -113,5 +122,6 @@ export function runConsent(): Promise<void> {
     applyGpcIfNeeded()
     showGpcBannerIfNeeded()
     dispatchConsentChange()
+    pushGoogleConsentUpdate()
   })
 }
