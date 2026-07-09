@@ -122,6 +122,9 @@ export function runConsent(): Promise<void> {
     applyGpcIfNeeded()
     showGpcBannerIfNeeded()
     dispatchConsentChange()
-    pushGoogleConsentUpdate()
+    // Only reflect a *recorded* choice on load. A fresh visitor has no valid
+    // consent yet, so the mode-aware `default` (granted in opt-out) must stand
+    // — deriving an update from hasConsent() here would wrongly force denied.
+    if (CookieConsent.validConsent()) pushGoogleConsentUpdate()
   })
 }

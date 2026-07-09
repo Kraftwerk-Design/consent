@@ -77,8 +77,9 @@ describe('runConsent + Google Consent Mode', () => {
     )
     cfg.onChange!({} as never)
 
-    // runConsent's own `.then` already pushed an initial (denied) update, so
-    // assert on the LAST update — the one from this onChange.
+    // With no recorded consent on this fresh load, runConsent's own `.then`
+    // pushes nothing — the only update comes from this onChange. Still assert
+    // on the LAST update so this stays robust if that changes.
     const updates = entries().filter(
       (e) => e[0] === 'consent' && e[1] === 'update',
     )
@@ -96,5 +97,51 @@ describe('runConsent + Google Consent Mode', () => {
     })
     await runConsent()
     expect((window as W).dataLayer).toBeUndefined()
+  })
+
+  it('does not clobber the granted opt-out default on a fresh (no-consent) load', async () => {
+    const optOutCats: ConsentCategory[] = [
+      {
+        id: 'necessary',
+        enabled: true,
+        readOnly: true,
+        google: ['security_storage', 'functionality_storage'],
+      },
+      {
+        id: 'analytics',
+        enabled: true,
+        analytics: true,
+        google: [
+          'analytics_storage',
+          'ad_storage',
+          'ad_user_data',
+          'ad_personalization',
+        ],
+      },
+    ]
+    configureConsent({
+      googleConsentMode: true,
+      reloadOnConsentChange: false,
+      mode: 'opt-out',
+      categories: optOutCats,
+    })
+    // Fresh visitor: no recorded choice yet. (Explicit because a prior test in
+    // this file permanently overrides the mock's return value via
+    // mockReturnValue, which vi.clearAllMocks() does not undo.)
+    vi.mocked(CookieConsent.validConsent).mockReturnValue(false)
+
+    await runConsent()
+
+    const defaults = entries().filter(
+      (e) => e[0] === 'consent' && e[1] === 'default',
+    )
+    expect(
+      (defaults[0][2] as Record<string, unknown>).analytics_storage,
+    ).toBe('granted')
+
+    const updates = entries().filter(
+      (e) => e[0] === 'consent' && e[1] === 'update',
+    )
+    expect(updates.length).toBe(0)
   })
 })
