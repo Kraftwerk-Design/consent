@@ -114,6 +114,33 @@ describe('pushGoogleConsentDefault', () => {
     expect('personalization_storage' in d).toBe(false)
   })
 
+  it('OR-merges a shared signal across categories regardless of order', () => {
+    const GRANTED_CAT: ConsentCategory = {
+      id: 'shared-granted',
+      enabled: true,
+      google: ['analytics_storage'],
+    }
+    const DENIED_CAT: ConsentCategory = {
+      id: 'shared-denied',
+      enabled: false,
+      google: ['analytics_storage'],
+    }
+
+    configureConsent({
+      googleConsentMode: true,
+      categories: [DENIED_CAT, GRANTED_CAT],
+    })
+    pushGoogleConsentDefault()
+    expect(lastCommand('default')!.analytics_storage).toBe('granted')
+
+    configureConsent({
+      googleConsentMode: true,
+      categories: [GRANTED_CAT, DENIED_CAT],
+    })
+    pushGoogleConsentDefault()
+    expect(lastCommand('default')!.analytics_storage).toBe('granted')
+  })
+
   it('reuses an existing gtag/dataLayer instead of replacing it', () => {
     const existingGtag = vi.fn()
     ;(window as W).dataLayer = [{ existing: true }]
