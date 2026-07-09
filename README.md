@@ -134,8 +134,16 @@ categories: [
   signals, and the existing reload re-activates the blocked tag.
 
 **GPC is honored in both** — a GPC visitor's `analytics_storage`/`ad_*` come out
-`denied` regardless of mode (unless `allowGpcOverride`), because signals derive
-from the same consent state the rest of the library uses.
+`denied` by default in either mode. This holds **even under `allowGpcOverride`**:
+override only lets a *saved* opt-in later flip the signal to `granted` (via an
+`update`); the `default` command is denied for a GPC visitor regardless. The
+same rule governs the category's `enabled` state, so its `text/plain` tags stay
+blocked until that opt-in too.
+
+> **Signal mapping + GPC:** a signal is `granted` if **any** category mapping it
+> is granted (OR). If you map one Google signal (e.g. `ad_storage`) to both a
+> GPC-clamped category and a non-clamped one, GPC won't force it off. Put
+> `gpc: true` on every category that maps a signal you want GPC to clamp.
 
 ### 5. Gate embeds & widgets
 
