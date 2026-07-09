@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { configureConsent } from './config'
 import type { ConsentCategory } from './config.default'
 import { hasGpcSignal } from './gpc'
-import { pushGoogleConsentDefault } from './googleConsentMode'
+import {
+  pushGoogleConsentDefault,
+  pushGoogleConsentUpdate,
+} from './googleConsentMode'
+import * as CookieConsent from 'vanilla-cookieconsent'
 
 vi.mock('vanilla-cookieconsent', () => ({
   validConsent: vi.fn(() => false),
@@ -156,5 +160,47 @@ describe('pushGoogleConsentDefault', () => {
       expect.objectContaining({ wait_for_update: 500 }),
     )
     expect((window as W).dataLayer).toContainEqual({ existing: true })
+  })
+})
+
+describe('pushGoogleConsentUpdate', () => {
+  it('grants the signals of consented categories', () => {
+    configureConsent({
+      googleConsentMode: true,
+      categories: [NECESSARY, ANALYTICS],
+    })
+    vi.mocked(CookieConsent.validConsent).mockReturnValue(true)
+    vi.mocked(CookieConsent.acceptedCategory).mockImplementation(
+      (id) => id === 'analytics' || id === 'necessary',
+    )
+    pushGoogleConsentUpdate()
+    const u = lastCommand('update')!
+    expect(u.analytics_storage).toBe('granted')
+    expect(u.ad_user_data).toBe('granted')
+    expect(u.security_storage).toBe('granted')
+  })
+
+  it('denies the signals of non-consented categories', () => {
+    configureConsent({
+      googleConsentMode: true,
+      categories: [NECESSARY, ANALYTICS],
+    })
+    vi.mocked(CookieConsent.validConsent).mockReturnValue(true)
+    vi.mocked(CookieConsent.acceptedCategory).mockImplementation(
+      (id) => id === 'necessary',
+    )
+    pushGoogleConsentUpdate()
+    const u = lastCommand('update')!
+    expect(u.analytics_storage).toBe('denied')
+    expect(u.security_storage).toBe('granted')
+  })
+
+  it('does nothing when the feature is off', () => {
+    configureConsent({
+      googleConsentMode: false,
+      categories: [NECESSARY, ANALYTICS],
+    })
+    pushGoogleConsentUpdate()
+    expect((window as W).dataLayer).toBeUndefined()
   })
 })

@@ -1,3 +1,4 @@
+import { hasConsent } from './analytics'
 import { getConsentConfig, isGpcClamped } from './config'
 import type { ConsentCategory } from './config.default'
 import { hasGpcSignal } from './gpc'
@@ -64,4 +65,15 @@ export function pushGoogleConsentDefault(): void {
     (category) => (category.enabled ?? false) && !gpcClampedOff(category.id),
   )
   getGtag()('consent', 'default', { ...signals, wait_for_update: 500 })
+}
+
+/**
+ * Push the Consent Mode `update` command on every consent change. Derives from
+ * `hasConsent` (a real recorded choice), which already honors the GPC clamp.
+ */
+export function pushGoogleConsentUpdate(): void {
+  if (typeof window === 'undefined') return
+  if (!getConsentConfig().googleConsentMode) return
+  const signals = computeSignals((category) => hasConsent(category.id))
+  getGtag()('consent', 'update', signals)
 }
