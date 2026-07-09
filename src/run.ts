@@ -12,6 +12,10 @@ import {
   pushGoogleConsentDefault,
   pushGoogleConsentUpdate,
 } from './googleConsentMode'
+import {
+  pushMetaPixelConsentDefault,
+  pushMetaPixelConsentUpdate,
+} from './metaPixelConsentMode'
 
 function isGpcCompliant(): boolean {
   if (!CookieConsent.validConsent()) return false
@@ -85,6 +89,7 @@ export function runConsent(): Promise<void> {
   }
 
   pushGoogleConsentDefault()
+  pushMetaPixelConsentDefault()
 
   return CookieConsent.run({
     mode: config.mode,
@@ -102,17 +107,20 @@ export function runConsent(): Promise<void> {
     onFirstConsent: () => {
       dispatchConsentChange()
       pushGoogleConsentUpdate()
+      pushMetaPixelConsentUpdate()
       reloadIfNeeded()
     },
 
     onConsent: () => {
       dispatchConsentChange()
       pushGoogleConsentUpdate()
+      pushMetaPixelConsentUpdate()
     },
 
     onChange: () => {
       dispatchConsentChange()
       pushGoogleConsentUpdate()
+      pushMetaPixelConsentUpdate()
       reloadIfNeeded()
     },
 
@@ -130,6 +138,9 @@ export function runConsent(): Promise<void> {
     // Only reflect a *recorded* choice on load. A fresh visitor has no valid
     // consent yet, so the mode-aware `default` (granted in opt-out) must stand
     // — deriving an update from hasConsent() here would wrongly force denied.
-    if (CookieConsent.validConsent()) pushGoogleConsentUpdate()
+    if (CookieConsent.validConsent()) {
+      pushGoogleConsentUpdate()
+      pushMetaPixelConsentUpdate()
+    }
   })
 }
