@@ -1,11 +1,16 @@
-import { initConsentApi } from './analytics'
+import { installWindowApi } from './analytics'
 import { configureConsent, type ConsentConfig } from './config'
 import { defineConsentEmbed, defineConsentPour } from './embeds/index'
 import { runConsent } from './run'
 
-export { getConsentConfig, configureConsent } from './config'
+export { getConsentConfig, configureConsent, validateConsentConfig } from './config'
 export type { ConsentConfig } from './config'
-export type { ConsentCategory, GoogleConsentSignal } from './config.default'
+export type {
+  ConsentCategory,
+  GoogleConsentSignal,
+  AutoClearCookie,
+  CategoryCopy,
+} from './config.default'
 
 export { hasGpcSignal } from './gpc'
 
@@ -18,6 +23,8 @@ export {
   promptAnalyticsConsent,
   requireAnalyticsConsent,
   onAnalyticsConsentChange,
+  installWindowApi,
+  /** @deprecated Renamed to installWindowApi. */
   initConsentApi,
 } from './analytics'
 export type { ConsentApi } from './analytics'
@@ -40,7 +47,7 @@ export function initConsent(
   overrides: Partial<ConsentConfig> = {},
 ): Promise<void> {
   configureConsent(overrides)
-  initConsentApi()
+  installWindowApi()
   defineConsentEmbed()
   defineConsentPour()
   return runConsent()

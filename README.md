@@ -14,7 +14,14 @@ npm install @kraftwerkdesign/consent vanilla-cookieconsent
 ```
 
 `vanilla-cookieconsent` is a peer dependency — you control its version and own
-its stylesheet (see **Styles** below).
+its stylesheet.
+
+**Styles** — the package ships no CSS side-effect of its own; import the
+banner styles yourself, as shown in step 3:
+
+```ts
+import 'vanilla-cookieconsent/dist/cookieconsent.css'
+```
 
 ### 2. Configure
 
@@ -34,6 +41,7 @@ Overridable settings:
 
 | Setting | Description |
 |---|---|
+| `mode` | `'opt-in'` (prior consent, e.g. GDPR) or `'opt-out'` (consent-by-default with a right to opt out, e.g. CCPA). Default `'opt-in'`. |
 | `cookieName` | Consent cookie name |
 | `privacyPolicyUrl` | Link in preferences modal |
 | `categories` | Full category list — replaces the default `necessary`/`analytics` set |
@@ -41,15 +49,20 @@ Overridable settings:
 | `consentChangeEvent` | Custom DOM event dispatched when consent changes (default `consent:change`). Its `detail` is `{ accepted, categories }`. |
 | `gpcBannerAckKey` | sessionStorage key for GPC banner dismiss (optional override) |
 | `allowGpcOverride` | Let visitors opt back into analytics despite a GPC signal — GPC becomes an overridable default rather than a hard lock (default `false`). See the [GPC note](#notes) |
-| `windowNamespace` | Global namespace object for the imperative API (default `KDConsent`) |
 | `reloadOnConsentChange` | Reload on non-GPC consent change so blocked scripts activate (default `true`) |
 | `googleConsentMode` | Emit Google Consent Mode v2 signals (`default` at init, `update` on change), mapped from each category's `google` list. Off by default. See [Google Consent Mode](#google-consent-mode-v2-optional). |
 | `metaPixelConsentMode` | Emit Meta Pixel consent signals (`fbq('consent', …)`) on consent change, mapped from each category's `meta` flag. Opt-out adds Limited Data Use (LDU). Off by default. See [Meta Pixel Consent Mode](#meta-pixel-consent-mode-optional). |
 | `buildCopy` | Override banner/preferences copy wholesale (optional) |
 
-Any field of `ConsentConfig` is overridable, including `mode` and `guiOptions`
+Any field of `ConsentConfig` is overridable, including `guiOptions`
 (vanilla-cookieconsent layout/position). All defaults live in `config.default.ts`;
 anything you omit falls through to them.
+
+`configureConsent()` (called internally by `initConsent()`, or by you directly —
+see below) validates the resolved config and `console.warn`s on common
+misconfigurations — duplicate category ids, more than one `analytics: true`
+category, an unresolvable `gateCategory`, or `google`/`meta` signal flags set
+while the corresponding consent-mode flag is off. It never throws.
 
 ### 3. Initialize in app entry
 
@@ -66,8 +79,9 @@ initConsent(consentConfig)
 `initConsent(overrides)` merges the config, exposes the imperative API on
 `window`, registers the `<consent-embed>` and `<consent-pour>` elements, and
 runs the banner. To run pieces yourself, call `configureConsent(overrides)`
-first, then `initConsentApi()`, `defineConsentEmbed()`, `defineConsentPour()`,
-and `runConsent()`.
+first, then `installWindowApi()`, `defineConsentEmbed()`, `defineConsentPour()`,
+and `runConsent()`. (`installWindowApi()` was previously named `initConsentApi()`
+— the old name still works as a `@deprecated` alias.)
 
 ### 4. Templates
 
@@ -113,9 +127,11 @@ categories: [
 
 - **opt-out (CCPA):** `mode: 'opt-out'`, consent-gated categories `enabled: true`.
   The `default` emits **granted** for a fresh visitor; opting out (or GPC) pushes
-  an `update` flipping the signals to `denied`. Tags usually load unblocked and
-  `reloadOnConsentChange` is off. Inline the same default in `<head>` above the
-  GTM snippet so it is read before the container loads — use
+  an `update` flipping the signals to `denied`. Tags usually load unblocked, so
+  there's typically nothing to re-activate on opt-out — you'll commonly set
+  `reloadOnConsentChange: false` here (the default is `true` regardless of
+  `mode`). Inline the same default in `<head>` above the GTM snippet so it is
+  read before the container loads — use
   [`renderGoogleConsentDefaultScript()`](#synchronous-head-default) so a returning
   opted-out visitor defaults `denied` synchronously, with no dependency on the
   async `update` landing inside `wait_for_update`.
@@ -140,11 +156,18 @@ is set before the container loads. Unlike a hand-authored snippet it is
 *synchronously* — never granted-then-flipped:
 
 ```ts
-import { renderGoogleConsentDefaultScript } from '@kraftwerkdesign/consent'
+import { configureConsent, renderGoogleConsentDefaultScript } from '@kraftwerkdesign/consent'
+import { consentConfig } from './consent.config'
 
 // Framework-agnostic — emit the string server-side, above your GTM snippet.
+configureConsent(consentConfig) // the same config object passed to initConsent()
 const headHtml = renderGoogleConsentDefaultScript()
 ```
+
+Call it **after** `configureConsent()`, with the same config object you pass to
+`initConsent()` — `renderGoogleConsentDefaultScript()` reads from the resolved
+config store, not the raw overrides. It returns `''` when `googleConsentMode`
+is off.
 
 The returned script reads `document.cookie` and `navigator.globalPrivacyControl`
 at **runtime**, so it stays correct per-visitor even served from a static/CDN
@@ -160,6 +183,56 @@ JSON. Returns `''` when `googleConsentMode` is off.
 > is granted (OR). If you map one Google signal (e.g. `ad_storage`) to both a
 > GPC-clamped category and a non-clamped one, GPC won't force it off. Put
 > `gpc: true` on every category that maps a signal you want GPC to clamp.
+
+#### Server-rendered / Twig (Craft, PHP) sites
+
+`renderGoogleConsentDefaultScript()` is a function — it's no help on a Twig
+site with no JS runtime around to call it at render time. For the **default**
+config shipped in `config.default.ts`, the block below is that same function's
+output, pre-generated and ready to paste as-is into `_layout.twig`'s `<head>`,
+**above** the GTM/gtag snippet:
+
+<!-- gcm-default-script:start -->
+```html
+<script>(function(){
+var P={"rx":"(?:^|;\\s*)kd_cookie_consent=([^;]*)","override":false,"categories":[{"id":"necessary","enabled":true,"readOnly":true,"clamped":false,"google":["security_storage","functionality_storage"]},{"id":"analytics","enabled":false,"readOnly":false,"clamped":true,"google":["analytics_storage","ad_storage","ad_user_data","ad_personalization"]}]};
+var saved=null;
+try{var m=document.cookie.match(new RegExp(P.rx));if(m){var v=JSON.parse(decodeURIComponent(m[1]));if(v&&Array.isArray(v.categories))saved=v.categories;}}catch(e){}
+var gpc=navigator.globalPrivacyControl===true;
+var s={};
+for(var i=0;i<P.categories.length;i++){
+var c=P.categories[i],granted;
+if(c.readOnly){granted=true;}
+else{var off=c.clamped&&gpc;if(saved){granted=(off&&!P.override)?false:saved.indexOf(c.id)!==-1;}else{granted=c.enabled&&!off;}}
+for(var j=0;j<c.google.length;j++){var sig=c.google[j];if(s[sig]==='granted')continue;s[sig]=granted?'granted':'denied';}
+}
+s.wait_for_update=500;
+window.dataLayer=window.dataLayer||[];
+var gtag=window.gtag||(window.gtag=function(){window.dataLayer.push(arguments);});
+gtag('consent','default',s);
+})();</script>
+```
+<!-- gcm-default-script:end -->
+
+This is exactly what
+`configureConsent({ googleConsentMode: true })` +
+`renderGoogleConsentDefaultScript()` produces for an otherwise-default config
+(a test in the repo asserts this block never drifts from that output). If your
+project overrides `cookieName`, `categories`, or `allowGpcOverride`, hand-edit
+the embedded `P = {…}` object to match — everything a visit needs is in there:
+
+- `P.rx` — the regex used to find the consent cookie; it's derived from
+  `cookieName`, so swap in your cookie name if you override it.
+- `P.categories[]` — one entry per category with a `google` list, each with
+  `id`, `enabled` (the mode baseline), `readOnly` (necessary categories),
+  `clamped` (subject to the GPC clamp), and `google` (the signals it grants).
+  Add/remove/edit entries to match your `categories` config.
+- `P.override` — your `allowGpcOverride` setting.
+
+If you're rendering pages from Node (or any JS/TS build/render step) instead of
+Twig, skip the hand-editing — call
+[`renderGoogleConsentDefaultScript()`](#synchronous-head-default) directly at
+build/render time and it will always match your actual config.
 
 ### Meta Pixel Consent Mode (optional)
 
@@ -427,28 +500,32 @@ for the default gate category.
 
 ```
 src/
-├── index.ts            Public API + initConsent(overrides)
-├── config.default.ts   Shared defaults + ConsentConfig/ConsentCategory types
-├── config.ts           Runtime store: configureConsent() / getConsentConfig()
-├── deepMerge.ts        Config deep-merge (arrays replace, undefined skipped)
-├── gpc.ts              Global Privacy Control detection
-├── analytics.ts        has/require/prompt + event bus + initConsentApi()
-├── run.ts              CookieConsent.run() + lifecycle
-├── gate.ts             setupConsentGate() primitive
+├── index.ts                 Public API + initConsent(overrides)
+├── config.default.ts        Shared defaults + ConsentConfig/ConsentCategory types
+├── config.ts                Runtime store: configureConsent() / getConsentConfig()
+├── deepMerge.ts             Config deep-merge (arrays replace, undefined skipped)
+├── gpc.ts                   Global Privacy Control detection
+├── consentCookie.ts         Parses the saved vanilla-cookieconsent cookie (single source of truth)
+├── analytics.ts             has/require/prompt + event bus + installWindowApi()
+├── googleConsentMode.ts     Google Consent Mode v2 default/update pushes + renderGoogleConsentDefaultScript()
+├── metaPixelConsentMode.ts  Meta Pixel grant/revoke + Limited Data Use (LDU)
+├── run.ts                   CookieConsent.run() + lifecycle
+├── gate.ts                  setupConsentGate() primitive
 ├── copy/
-│   └── en.ts           Banner shell copy; sections generated from categories
+│   └── en.ts                Banner shell copy; sections generated from categories
 └── embeds/
-    ├── index.ts        Re-exports defineConsentEmbed()
-    └── consentEmbed.ts  <consent-embed> element (template → light DOM on consent)
+    ├── index.ts             Re-exports defineConsentEmbed() + defineConsentPour()
+    ├── consentEmbed.ts      <consent-embed> element (template → light DOM on consent)
+    └── consentPour.ts       <consent-pour> element (PourNow wine-finder facade)
 ```
 
 ## Notes
 
 - **Non-GPC:** consent changes trigger a full page reload so `manageScriptTags` activates blocked scripts. Set `reloadOnConsentChange: false` for SPA-style sites that rely on the live `onAnalyticsConsentChange` listeners instead.
-- **GPC:** detected client-side via `navigator.globalPrivacyControl` (no server header check — cache-safe). No reload; opt-out only blocks scripts, and an informational banner confirms the signal was honored.
+- **GPC:** detected client-side via `navigator.globalPrivacyControl` (no server header check — cache-safe), exposed as the exported `hasGpcSignal()` helper. No reload; opt-out only blocks scripts, and an informational banner confirms the signal was honored.
 - **GPC override (`allowGpcOverride`, default `false`):** by default GPC is a hard lock — the analytics category is forced read-only and re-clamped to necessary-only on every load, so a visitor can never turn tracking back on. Set `allowGpcOverride: true` to treat GPC as an overridable *default* instead: analytics still starts off and the banner explains the signal was honored, but the preferences toggle stays operable, the banner offers an explicit **Accept all** / **Keep off** choice, and a saved opt-in sticks across loads (and reloads to activate blocked scripts, like any non-GPC change). GPC is a legally binding opt-out where laws like CCPA/CPRA apply; only enable this where a genuine, user-initiated override is appropriate, and treat it as a compliance decision. The GPC spec explicitly contemplates it — *"a specific arrangement with that person may permit a website to ignore a generally applicable preference"* ([W3C GPC draft](https://w3c.github.io/gpc/)).
-- **Imperative API** is exposed at `window[windowNamespace]` (default `window.KDConsent`) with `hasAnalyticsConsent`, `requireAnalyticsConsent`, `promptAnalyticsConsent`, and `onAnalyticsConsentChange`.
-- Importing `analytics.ts` has **no side effects**; the window API and `[data-require-analytics]` delegation are registered by `initConsentApi()` (called from `initConsent()`).
+- **Imperative API** is exposed at `window.KDConsent` (type `ConsentApi`) with `hasConsent`, `requireConsent`, `promptConsent`, and `onConsentChange`, plus four `@deprecated` aliases scoped to the default gate category — `hasAnalyticsConsent`, `requireAnalyticsConsent`, `promptAnalyticsConsent`, `onAnalyticsConsentChange`.
+- Importing `analytics.ts` has **no side effects**; the window API and `[data-require-analytics]` delegation are registered by `installWindowApi()` (called from `initConsent()`; previously named `initConsentApi()`, kept as a deprecated alias).
 
 ## Releasing
 

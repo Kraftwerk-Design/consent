@@ -73,7 +73,44 @@ export function buildCategories(
   return categories
 }
 
+let hasRun = false
+
+/**
+ * Clear the {@link runConsent} re-init guard so it can be called again.
+ *
+ * @internal test-only. Not part of the public API — call this between test
+ * cases in the same module so each one can exercise a fresh `runConsent()`.
+ */
+export function __resetConsentRunForTests(): void {
+  hasRun = false
+}
+
+/**
+ * Initialize consent for the page: runs `CookieConsent.run()` with the
+ * resolved config, pushes the Google Consent Mode / Meta Pixel consent
+ * defaults before the analytics/ad containers load, wires the
+ * onFirstConsent/onConsent/onChange callbacks to dispatch consent-change
+ * events and push consent-mode updates, and — once the banner has
+ * initialized — applies the GPC clamp (forcing a non-compliant category off)
+ * and shows the informational GPC banner, then dispatches the initial
+ * consent-change event.
+ *
+ * Call once per page, after `configureConsent()`. `CookieConsent.run()`
+ * itself silently no-ops on a second call while still holding its original
+ * config, so `runConsent()` guards against being invoked more than once: a
+ * second call logs a `console.warn` and resolves immediately without
+ * touching `CookieConsent.run` or re-dispatching, rather than running its own
+ * continuation against a config the banner never adopted.
+ */
 export function runConsent(): Promise<void> {
+  if (hasRun) {
+    console.warn(
+      '[consent] runConsent() already initialized; ignoring re-init — call configureConsent()+runConsent() only once per page.',
+    )
+    return Promise.resolve()
+  }
+  hasRun = true
+
   const config = getConsentConfig()
   const gpcActive = hasGpcSignal()
 

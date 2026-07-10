@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+API-hardening pass from a multi-agent API review. Slated for **0.6.0** (contains
+breaking changes).
+
+> **Breaking:** the `windowNamespace` config option was removed (the imperative
+> API is always `window.KDConsent`); `initConsentApi` was renamed to
+> `installWindowApi` (a deprecated alias remains); `getConsentConfig()` now
+> returns `Readonly<ConsentConfig>`.
+
+### Added
+
+- **Server-rendered / Twig (Craft, PHP) support** — a ready-to-paste static
+  Google Consent Mode `<script>` block in the README for sites with no JS
+  runtime to call `renderGoogleConsentDefaultScript()`. A drift-guard test keeps
+  the documented block byte-identical to the function's output.
+- **`validateConsentConfig()`** (exported) — pure config sanity checks.
+  `configureConsent()` now runs it and `console.warn`s (never throws) on
+  misconfigurations that previously failed silently: a resolved gate category
+  that matches no configured category (the permanent-`false` footgun), multiple
+  `analytics: true` categories, duplicate category ids, and `google`/`meta`
+  flags set while their consent mode is off.
+- **`installWindowApi()`** — the renamed, clearer entry point for installing the
+  `window.KDConsent` imperative API.
+- Exported the `AutoClearCookie` and `CategoryCopy` types (referenced by the
+  already-exported `ConsentCategory` but previously unexported).
+- `setupConsentGate()` now returns a teardown function that unsubscribes its
+  consent-change and trigger listeners.
+
+### Changed
+
+- `getConsentConfig()` returns `Readonly<ConsentConfig>` so consumers can't
+  mutate the shared internal config through the getter.
+- `hasGpcSignal()` guards `typeof navigator`, so `hasConsent()` and the other
+  import-safe predicates no longer throw on Node/edge runtimes without a global
+  `navigator`.
+- `runConsent()` guards against double-initialization: a second call warns and
+  no-ops instead of running its continuation against a config the banner never
+  adopted (SPA re-init / HMR / multi-tenant). Call once per page.
+- `<consent-embed>` / `<consent-pour>` release their listeners in
+  `disconnectedCallback`, fixing an unbounded listener leak under SPA DOM churn.
+- `promptConsent`'s doc comment now states plainly that its category parameter
+  is accepted for call-site symmetry but does not scope the (non-category-aware)
+  preferences modal.
+
+### Deprecated
+
+- `initConsentApi` — use `installWindowApi`.
+- `hasAnalyticsConsent` / `requireAnalyticsConsent` / `promptAnalyticsConsent` /
+  `onAnalyticsConsentChange` — use `hasConsent()` / `requireConsent()` /
+  `promptConsent()` / `onConsentChange()` with a category id. Still exported and
+  still on the `window` API (deployed inline scripts rely on them).
+
+### Removed
+
+- The `windowNamespace` config option. The imperative API is always installed at
+  `window.KDConsent`, so its type augmentation can no longer diverge from the
+  runtime.
+
+### Fixed
+
+- The README `renderGoogleConsentDefaultScript()` example called it without a
+  prior `configureConsent()`, so it silently returned `''`; it now configures
+  first.
+- Dangling `{@link}` references to non-exported internals in
+  `renderGoogleConsentDefaultScript`'s JSDoc.
+- README drift: removed the stale `windowNamespace` row, added the `mode`
+  default, listed the full imperative-API surface, refreshed the file map, and
+  fixed the broken "Styles" cross-reference.
+
 ## [0.5.0] - 2026-07-09
 
 ### Added

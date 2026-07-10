@@ -30,8 +30,16 @@ export interface ConsentGate {
  * teardown as consent changes. A manually-activated target is left running
  * across benign re-dispatches while consent is still valid, and only torn down
  * when consent is withdrawn.
+ *
+ * Returns a teardown function that releases everything this call wired up
+ * (the consent-change subscription and the trigger click listeners). Callers
+ * that don't need to tear the gate down (e.g. a gate that lives for the page's
+ * whole lifetime) can simply ignore the return value; callers embedding the
+ * gate in something with its own lifecycle (a custom element's
+ * `disconnectedCallback`, for example) should call it to avoid leaking a
+ * document-level listener per instance.
  */
-export function setupConsentGate(gate: ConsentGate): void {
+export function setupConsentGate(gate: ConsentGate): () => void {
   let activated = false
 
   const activate = (): boolean => {
@@ -64,5 +72,10 @@ export function setupConsentGate(gate: ConsentGate): void {
   }
 
   sync()
-  onConsentChange(sync, category)
+  const unsubscribe = onConsentChange(sync, category)
+
+  return (): void => {
+    unsubscribe()
+    gate.triggers.forEach((el) => el?.removeEventListener('click', onTrigger))
+  }
 }

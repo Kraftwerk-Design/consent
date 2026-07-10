@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import * as CookieConsent from 'vanilla-cookieconsent'
 import { configureConsent } from './config'
-import { buildCategories } from './run'
+import { buildCategories, runConsent, __resetConsentRunForTests } from './run'
 
 vi.mock('vanilla-cookieconsent', () => ({
   validConsent: vi.fn(() => false),
@@ -11,7 +12,15 @@ vi.mock('vanilla-cookieconsent', () => ({
   show: vi.fn(),
 }))
 
+// runConsent's `.then()` continuation unconditionally dispatches a DOM event;
+// this file runs under the node environment (no `document`), so stub it out
+// for the re-init guard test below.
+vi.mock('./analytics', () => ({
+  dispatchConsentChange: vi.fn(),
+}))
+
 beforeEach(() => {
+  __resetConsentRunForTests()
   configureConsent({
     allowGpcOverride: false,
     categories: [
@@ -85,5 +94,29 @@ describe('buildCategories GPC enabled downgrade', () => {
     })
     const cats = buildCategories(false)
     expect(cats!.analytics.enabled).toBe(true)
+  })
+})
+
+describe('runConsent re-init guard', () => {
+  it('warns and no-ops on a second call, without re-running CookieConsent or re-dispatching', async () => {
+    const dispatchConsentChange = (
+      await import('./analytics')
+    ).dispatchConsentChange as ReturnType<typeof vi.fn>
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await runConsent()
+    expect(CookieConsent.run).toHaveBeenCalledTimes(1)
+    const dispatchCountAfterFirst = dispatchConsentChange.mock.calls.length
+    expect(dispatchCountAfterFirst).toBeGreaterThan(0)
+    expect(warnSpy).not.toHaveBeenCalled()
+
+    await runConsent()
+
+    expect(CookieConsent.run).toHaveBeenCalledTimes(1) // still 1 — no re-run
+    expect(dispatchConsentChange.mock.calls.length).toBe(dispatchCountAfterFirst) // no re-dispatch
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy.mock.calls[0][0]).toMatch(/already initialized/i)
+
+    warnSpy.mockRestore()
   })
 })

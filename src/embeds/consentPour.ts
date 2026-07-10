@@ -36,6 +36,7 @@ export function defineConsentPour(): void {
 
   class ConsentPour extends HTMLElement {
     private wired = false
+    private teardown: (() => void) | null = null
 
     connectedCallback(): void {
       if (this.wired) return
@@ -112,13 +113,19 @@ export function defineConsentPour(): void {
         show(poster)
       }
 
-      setupConsentGate({
+      this.teardown = setupConsentGate({
         category,
         activate,
         deactivate,
         triggers: [poster],
         autoActivate: this.hasAttribute('autoactivate'),
       })
+    }
+
+    disconnectedCallback(): void {
+      this.teardown?.()
+      this.teardown = null
+      this.wired = false
     }
   }
 

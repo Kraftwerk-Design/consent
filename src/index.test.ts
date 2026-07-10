@@ -14,6 +14,8 @@ describe('public exports', () => {
       'onAnalyticsConsentChange',
       'setupConsentGate',
       'initConsent',
+      'installWindowApi',
+      'initConsentApi',
     ]) {
       expect(typeof (pkg as Record<string, unknown>)[name]).toBe('function')
     }

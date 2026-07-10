@@ -123,9 +123,10 @@ function serializeForScript(value: unknown): string {
  * never bakes one visitor's consent into the page. Returns `''` when
  * `googleConsentMode` is off.
  *
- * The derivation matches {@link categoryGrantedByDefault} / {@link computeSignals}
- * exactly (guaranteed by a parity test), so the inline and init-time defaults
- * never diverge. Consumers never parse the consent cookie themselves.
+ * The derivation matches the init-time default's category-by-category
+ * grant logic and signal aggregation exactly — guaranteed by a parity test —
+ * so the inline and init-time defaults never diverge. Consumers never parse
+ * the consent cookie themselves.
  */
 export function renderGoogleConsentDefaultScript(): string {
   const config = getConsentConfig()

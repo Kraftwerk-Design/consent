@@ -150,4 +150,37 @@ describe('<consent-pour>', () => {
     )
     expect(frame.style.height).not.toBe('500px')
   })
+
+  it('releases its consent-change listener once removed from the DOM', () => {
+    const el = makePour('functionality')
+    document.body.append(el)
+    el.remove()
+
+    // Grant consent after disconnect and re-broadcast: a leaked listener
+    // would still build the iframe on the (now detached) element.
+    grant('functionality')
+    document.dispatchEvent(
+      new CustomEvent('consent:change', {
+        detail: { accepted: true, categories: { functionality: true } },
+      }),
+    )
+
+    expect(frameOf(el)).toBeNull()
+  })
+
+  it('re-wires cleanly when reconnected after a disconnect', () => {
+    const el = makePour('functionality')
+    document.body.append(el)
+    el.remove()
+    document.body.append(el)
+
+    grant('functionality')
+    document.dispatchEvent(
+      new CustomEvent('consent:change', {
+        detail: { accepted: true, categories: { functionality: true } },
+      }),
+    )
+
+    expect(frameOf(el)).not.toBeNull()
+  })
 })

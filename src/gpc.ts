@@ -13,7 +13,10 @@ declare global {
  * server-side header check is needed — which also keeps this correct on
  * statically-cached pages, where a server-rendered flag would be frozen for all
  * visitors.
+ *
+ * Guarded for SSR / non-browser runtimes where `navigator` is undefined.
  */
 export function hasGpcSignal(): boolean {
+  if (typeof navigator === 'undefined') return false
   return navigator.globalPrivacyControl === true
 }

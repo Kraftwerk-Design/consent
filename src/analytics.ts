@@ -35,7 +35,14 @@ export function hasConsent(
   return validByDefault && CookieConsent.acceptedCategory(categoryId)
 }
 
-/** Open the consent UI when a gated thing is activated without consent. */
+/**
+ * Open the consent UI when a gated thing is activated without consent.
+ *
+ * `categoryId` is accepted for call-site symmetry with `requireConsent` /
+ * `hasConsent`, but vanilla-cookieconsent's preferences modal is not
+ * category-scoped — there is currently no way to deep-link it to a specific
+ * section, so the parameter has no effect on what's shown.
+ */
 export function promptConsent(_categoryId?: string): void {
   if (!CookieConsent.validConsent()) {
     CookieConsent.show()
@@ -55,9 +62,20 @@ export function requireConsent(
   return false
 }
 
-/** Back-compat aliases — the default gate category. */
+/**
+ * Back-compat alias — the default gate category.
+ * @deprecated Use hasConsent()/requireConsent()/promptConsent()/onConsentChange() with a category id.
+ */
 export const hasAnalyticsConsent = (): boolean => hasConsent()
+/**
+ * Back-compat alias — the default gate category.
+ * @deprecated Use hasConsent()/requireConsent()/promptConsent()/onConsentChange() with a category id.
+ */
 export const requireAnalyticsConsent = (): boolean => requireConsent()
+/**
+ * Back-compat alias — the default gate category.
+ * @deprecated Use hasConsent()/requireConsent()/promptConsent()/onConsentChange() with a category id.
+ */
 export const promptAnalyticsConsent = (): void => promptConsent()
 
 export function dispatchConsentChange(): void {
@@ -102,12 +120,15 @@ export function onConsentChange(
   return () => document.removeEventListener(eventName, listener)
 }
 
-/** Back-compat alias — the default gate category. */
+/**
+ * Back-compat alias — the default gate category.
+ * @deprecated Use hasConsent()/requireConsent()/promptConsent()/onConsentChange() with a category id.
+ */
 export const onAnalyticsConsentChange = (
   handler: (accepted: boolean) => void,
 ): (() => void) => onConsentChange(handler)
 
-/** Imperative consent API exposed on `window[windowNamespace]`. */
+/** Imperative consent API exposed on `window.KDConsent`. */
 export interface ConsentApi {
   hasConsent: typeof hasConsent
   requireConsent: typeof requireConsent
@@ -122,7 +143,6 @@ export interface ConsentApi {
 
 declare global {
   interface Window {
-    /** Default namespace; a project may rename it via `windowNamespace`. */
     KDConsent?: ConsentApi
   }
 }
@@ -145,19 +165,21 @@ function handleRequireConsentClick(event: MouseEvent): void {
   promptConsent(categoryId)
 }
 
-let apiInitialized = false
+let windowApiInstalled = false
 
 /**
- * Register the global consent surface: the `window[windowNamespace]` API object
+ * You almost always want `initConsent()`. This only installs
+ * `window.KDConsent` (the imperative API) and the click delegation.
+ *
+ * Registers the global consent surface: the `window.KDConsent` API object
  * and the `[data-require-analytics]` click delegation. Called by `initConsent()`
  * — importing this module no longer has side effects, so the pure predicates can
  * be imported anywhere without wiring up globals. Idempotent.
  */
-export function initConsentApi(): void {
-  if (apiInitialized) return
-  apiInitialized = true
+export function installWindowApi(): void {
+  if (windowApiInstalled) return
+  windowApiInstalled = true
 
-  const namespace = getConsentConfig().windowNamespace
   const api: ConsentApi = {
     hasConsent,
     requireConsent,
@@ -168,7 +190,10 @@ export function initConsentApi(): void {
     promptAnalyticsConsent,
     onAnalyticsConsentChange,
   }
-  ;(window as unknown as Record<string, unknown>)[namespace] = api
+  window.KDConsent = api
 
   document.addEventListener('click', handleRequireConsentClick, true)
 }
+
+/** @deprecated Renamed to installWindowApi. */
+export const initConsentApi = installWindowApi

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as CookieConsent from 'vanilla-cookieconsent'
 import { configureConsent } from './config'
-import { initConsentApi } from './analytics'
+import { installWindowApi } from './analytics'
 
 vi.mock('vanilla-cookieconsent', () => ({
   validConsent: vi.fn(() => true),
@@ -16,13 +16,12 @@ beforeEach(() => {
   vi.mocked(CookieConsent.validConsent).mockReturnValue(true)
   vi.mocked(CookieConsent.acceptedCategory).mockReturnValue(false)
   configureConsent({
-    windowNamespace: 'KDConsent',
     categories: [
       { id: 'functionality' },
       { id: 'analytics', analytics: true },
     ],
   })
-  initConsentApi() // idempotent; registers the delegated handler once
+  installWindowApi() // idempotent; registers the delegated handler once
 })
 
 afterEach(() => {

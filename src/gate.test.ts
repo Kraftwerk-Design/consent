@@ -71,4 +71,49 @@ describe('setupConsentGate with a category', () => {
     dispatchConsentChange()
     expect(deactivate).toHaveBeenCalled()
   })
+
+  it('returns a teardown that unsubscribes from consent changes', () => {
+    vi.mocked(CookieConsent.acceptedCategory).mockImplementation(
+      (id) => id === 'functionality',
+    )
+    const activate = vi.fn(() => true)
+    const deactivate = vi.fn()
+    const teardown = setupConsentGate({
+      category: 'functionality',
+      activate,
+      deactivate,
+      triggers: [],
+      autoActivate: true,
+    })
+    activate.mockClear()
+    deactivate.mockClear()
+
+    teardown()
+
+    // Consent is withdrawn and re-dispatched after teardown: with the
+    // listener released, neither callback should fire again.
+    vi.mocked(CookieConsent.acceptedCategory).mockReturnValue(false)
+    dispatchConsentChange()
+
+    expect(deactivate).not.toHaveBeenCalled()
+    expect(activate).not.toHaveBeenCalled()
+  })
+
+  it('teardown removes trigger click listeners too', () => {
+    const activate = vi.fn(() => true)
+    const trigger = document.createElement('button')
+    const teardown = setupConsentGate({
+      category: 'functionality',
+      activate,
+      deactivate: vi.fn(),
+      triggers: [trigger],
+      autoActivate: false,
+    })
+    activate.mockClear()
+
+    teardown()
+    trigger.click()
+
+    expect(activate).not.toHaveBeenCalled()
+  })
 })

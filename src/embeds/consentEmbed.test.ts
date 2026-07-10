@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as CookieConsent from 'vanilla-cookieconsent'
 import { configureConsent } from '../config'
+import { dispatchConsentChange } from '../analytics'
 import { defineConsentEmbed } from './consentEmbed'
 
 vi.mock('vanilla-cookieconsent', () => ({
@@ -61,5 +62,34 @@ describe('<consent-embed category>', () => {
     const el = makeEmbed('functionality')
     document.body.append(el)
     expect(isStamped(el)).toBe(false)
+  })
+
+  it('releases its consent-change listener once removed from the DOM', () => {
+    const el = makeEmbed('functionality')
+    document.body.append(el)
+    el.remove()
+
+    // Grant consent after disconnect and re-broadcast: a leaked listener
+    // would still stamp the (now detached) element.
+    vi.mocked(CookieConsent.acceptedCategory).mockImplementation(
+      (id) => id === 'functionality',
+    )
+    dispatchConsentChange()
+
+    expect(isStamped(el)).toBe(false)
+  })
+
+  it('re-wires cleanly when reconnected after a disconnect', () => {
+    const el = makeEmbed('functionality')
+    document.body.append(el)
+    el.remove()
+    document.body.append(el)
+
+    vi.mocked(CookieConsent.acceptedCategory).mockImplementation(
+      (id) => id === 'functionality',
+    )
+    dispatchConsentChange()
+
+    expect(isStamped(el)).toBe(true)
   })
 })

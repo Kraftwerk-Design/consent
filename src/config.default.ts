@@ -93,8 +93,6 @@ export interface ConsentConfig {
    * it as a compliance decision, not a default. See README.
    */
   allowGpcOverride: boolean
-  /** Namespace object exposed on `window` for the imperative consent API. */
-  windowNamespace: string
   /**
    * Reload the page when consent changes (non-GPC) so server-blocked
    * `type="text/plain"` script tags re-activate. Set false for SPA-style
@@ -180,8 +178,6 @@ export const defaultConsentConfig: ConsentConfig = {
   gpcBannerAckKey: 'site_gpc_banner_ack',
 
   allowGpcOverride: false,
-
-  windowNamespace: 'KDConsent',
 
   reloadOnConsentChange: true,
 

@@ -4,7 +4,7 @@ import type { CookieConsentConfig } from 'vanilla-cookieconsent'
 import { hasGpcSignal } from './gpc'
 import { configureConsent } from './config'
 import type { ConsentCategory } from './config.default'
-import { runConsent } from './run'
+import { runConsent, __resetConsentRunForTests } from './run'
 
 vi.mock('vanilla-cookieconsent', () => ({
   validConsent: vi.fn(() => false),
@@ -42,6 +42,7 @@ const OPTOUT_CATS: ConsentCategory[] = [
 
 beforeEach(() => {
   vi.clearAllMocks()
+  __resetConsentRunForTests()
   vi.mocked(CookieConsent.validConsent).mockReturnValue(false)
   vi.mocked(CookieConsent.acceptedCategory).mockReturnValue(false)
   vi.mocked(hasGpcSignal).mockReturnValue(false)
