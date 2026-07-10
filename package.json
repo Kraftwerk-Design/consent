@@ -1,6 +1,6 @@
 {
   "name": "@kraftwerkdesign/consent",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Cookie consent built on vanilla-cookieconsent with GPC support, analytics gating, and consent-gated embeds.",
   "author": "Kraftwerk Design",
   "homepage": "https://github.com/Kraftwerk-Design/consent#readme",
