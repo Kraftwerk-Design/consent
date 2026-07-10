@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-API-hardening pass from a multi-agent API review. Slated for **0.6.0** (contains
-breaking changes).
+## [0.6.0] - 2026-07-09
+
+API-hardening pass from a multi-agent API review. Contains breaking changes.
 
 > **Breaking:** the `windowNamespace` config option was removed (the imperative
 > API is always `window.KDConsent`); `initConsentApi` was renamed to
@@ -163,7 +164,8 @@ breaking changes).
 
 - Initial published baseline.
 
-[Unreleased]: https://github.com/Kraftwerk-Design/consent/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Kraftwerk-Design/consent/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Kraftwerk-Design/consent/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Kraftwerk-Design/consent/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Kraftwerk-Design/consent/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Kraftwerk-Design/consent/compare/v0.3.0...v0.4.0
