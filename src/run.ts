@@ -11,6 +11,7 @@ import { hasGpcSignal } from './gpc'
 import {
   pushGoogleConsentDefault,
   pushGoogleConsentUpdate,
+  pushGoogleConsentBaselineUpdate,
 } from './googleConsentMode'
 import {
   pushMetaPixelConsentDefault,
@@ -172,12 +173,17 @@ export function runConsent(): Promise<void> {
     applyGpcIfNeeded()
     showGpcBannerIfNeeded()
     dispatchConsentChange()
-    // Only reflect a *recorded* choice on load. A fresh visitor has no valid
-    // consent yet, so the mode-aware `default` (granted in opt-out) must stand
-    // — deriving an update from hasConsent() here would wrongly force denied.
+    // Reflect the resolved state on load, on top of the denied `default`. A
+    // returning visitor gets their real recorded choice; a fresh visitor gets
+    // the mode baseline as an `update` (granted for opt-out) — otherwise the
+    // denied default would leave a fresh opt-out visitor stuck denied. Both are
+    // the safe `denied → granted` direction. Meta has no update buffering, so
+    // its fresh baseline stays with the pre-init default (see metaPixelConsentMode).
     if (CookieConsent.validConsent()) {
       pushGoogleConsentUpdate()
       pushMetaPixelConsentUpdate()
+    } else {
+      pushGoogleConsentBaselineUpdate()
     }
   })
 }

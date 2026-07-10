@@ -5,6 +5,7 @@ import { hasGpcSignal } from './gpc'
 import {
   pushGoogleConsentDefault,
   pushGoogleConsentUpdate,
+  pushGoogleConsentBaselineUpdate,
 } from './googleConsentMode'
 import * as CookieConsent from 'vanilla-cookieconsent'
 
@@ -70,6 +71,9 @@ afterEach(() => {
   delete (window as W).gtag
 })
 
+// The `default` is denied-by-default: consent-gated signals start denied,
+// readOnly (necessary) signals granted, INDEPENDENT of mode, cookie, and GPC.
+// Per-visitor state is applied afterward as an `update`.
 describe('pushGoogleConsentDefault', () => {
   it('does nothing when the feature is off', () => {
     configureConsent({
@@ -80,10 +84,9 @@ describe('pushGoogleConsentDefault', () => {
     expect((window as W).dataLayer).toBeUndefined()
   })
 
-  it('opt-in mode defaults consent-gated signals to denied', () => {
+  it('denies consent-gated signals and grants readOnly ones, with wait_for_update', () => {
     configureConsent({
       googleConsentMode: true,
-      mode: 'opt-in',
       categories: [NECESSARY, ANALYTICS],
     })
     pushGoogleConsentDefault()
@@ -95,44 +98,36 @@ describe('pushGoogleConsentDefault', () => {
     expect(d.wait_for_update).toBe(500)
   })
 
-  it('opt-out mode defaults enabled categories to granted', () => {
+  it('stays denied in opt-out mode with enabled categories (no early granted)', () => {
     configureConsent({
       googleConsentMode: true,
       mode: 'opt-out',
       categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
     })
     pushGoogleConsentDefault()
-    const d = lastCommand('default')!
-    expect(d.analytics_storage).toBe('granted')
-    expect(d.ad_personalization).toBe('granted')
+    expect(lastCommand('default')!.analytics_storage).toBe('denied')
   })
 
-  it('GPC forces clamped signals denied even in opt-out mode', () => {
+  it('ignores a saved cookie — the default never reflects a returning choice', () => {
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-in',
+      categories: [NECESSARY, ANALYTICS],
+    })
+    setSavedConsent(['necessary', 'analytics']) // opted in
+    pushGoogleConsentDefault()
+    expect(lastCommand('default')!.analytics_storage).toBe('denied')
+  })
+
+  it('ignores GPC — the denied baseline is already the safe state', () => {
     vi.mocked(hasGpcSignal).mockReturnValue(true)
     configureConsent({
       googleConsentMode: true,
       mode: 'opt-out',
-      allowGpcOverride: false,
       categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
     })
     pushGoogleConsentDefault()
     const d = lastCommand('default')!
-    expect(d.analytics_storage).toBe('denied') // clamp beats enabled
-    expect(d.security_storage).toBe('granted') // necessary not clamped
-  })
-
-  it('GPC forces clamped signals denied in the default even with allowGpcOverride', () => {
-    vi.mocked(hasGpcSignal).mockReturnValue(true)
-    configureConsent({
-      googleConsentMode: true,
-      mode: 'opt-out',
-      allowGpcOverride: true,
-      categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
-    })
-    pushGoogleConsentDefault()
-    const d = lastCommand('default')!
-    // Override governs whether the toggle stays operable / a saved opt-in
-    // persists — NOT the default-off state. A GPC visitor must default denied.
     expect(d.analytics_storage).toBe('denied')
     expect(d.security_storage).toBe('granted')
   })
@@ -143,101 +138,7 @@ describe('pushGoogleConsentDefault', () => {
       categories: [NECESSARY, ANALYTICS],
     })
     pushGoogleConsentDefault()
-    const d = lastCommand('default')!
-    expect('personalization_storage' in d).toBe(false)
-  })
-
-  it('OR-merges a shared signal across categories regardless of order', () => {
-    const GRANTED_CAT: ConsentCategory = {
-      id: 'shared-granted',
-      enabled: true,
-      google: ['analytics_storage'],
-    }
-    const DENIED_CAT: ConsentCategory = {
-      id: 'shared-denied',
-      enabled: false,
-      google: ['analytics_storage'],
-    }
-
-    configureConsent({
-      googleConsentMode: true,
-      categories: [DENIED_CAT, GRANTED_CAT],
-    })
-    pushGoogleConsentDefault()
-    expect(lastCommand('default')!.analytics_storage).toBe('granted')
-
-    configureConsent({
-      googleConsentMode: true,
-      categories: [GRANTED_CAT, DENIED_CAT],
-    })
-    pushGoogleConsentDefault()
-    expect(lastCommand('default')!.analytics_storage).toBe('granted')
-  })
-
-  it('opt-out: a returning opted-out visitor defaults denied (cookie-aware)', () => {
-    configureConsent({
-      googleConsentMode: true,
-      mode: 'opt-out',
-      categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
-    })
-    setSavedConsent(['necessary']) // analytics declined
-    pushGoogleConsentDefault()
-    const d = lastCommand('default')!
-    expect(d.analytics_storage).toBe('denied')
-    expect(d.ad_storage).toBe('denied')
-    expect(d.security_storage).toBe('granted') // readOnly stays granted
-  })
-
-  it('opt-in: a returning opted-in visitor defaults granted (cookie-aware)', () => {
-    configureConsent({
-      googleConsentMode: true,
-      mode: 'opt-in',
-      categories: [NECESSARY, ANALYTICS],
-    })
-    setSavedConsent(['necessary', 'analytics'])
-    pushGoogleConsentDefault()
-    const d = lastCommand('default')!
-    expect(d.analytics_storage).toBe('granted')
-    expect(d.ad_user_data).toBe('granted')
-  })
-
-  it('a saved opt-in under allowGpcOverride defaults granted despite GPC', () => {
-    vi.mocked(hasGpcSignal).mockReturnValue(true)
-    configureConsent({
-      googleConsentMode: true,
-      mode: 'opt-in',
-      allowGpcOverride: true,
-      categories: [NECESSARY, ANALYTICS],
-    })
-    setSavedConsent(['necessary', 'analytics'])
-    pushGoogleConsentDefault()
-    expect(lastCommand('default')!.analytics_storage).toBe('granted')
-  })
-
-  it('a saved opt-in is ignored under GPC without allowGpcOverride', () => {
-    vi.mocked(hasGpcSignal).mockReturnValue(true)
-    configureConsent({
-      googleConsentMode: true,
-      mode: 'opt-in',
-      allowGpcOverride: false,
-      categories: [NECESSARY, ANALYTICS],
-    })
-    setSavedConsent(['necessary', 'analytics'])
-    pushGoogleConsentDefault()
-    expect(lastCommand('default')!.analytics_storage).toBe('denied')
-  })
-
-  it('forces a readOnly category granted even if a stale cookie omits it', () => {
-    configureConsent({
-      googleConsentMode: true,
-      mode: 'opt-in',
-      categories: [NECESSARY, ANALYTICS],
-    })
-    setSavedConsent(['analytics']) // stale: predates necessary being saved
-    pushGoogleConsentDefault()
-    const d = lastCommand('default')!
-    expect(d.security_storage).toBe('granted')
-    expect(d.functionality_storage).toBe('granted')
+    expect('personalization_storage' in lastCommand('default')!).toBe(false)
   })
 
   it('reuses an existing gtag/dataLayer instead of replacing it', () => {
@@ -255,6 +156,73 @@ describe('pushGoogleConsentDefault', () => {
       expect.objectContaining({ wait_for_update: 500 }),
     )
     expect((window as W).dataLayer).toContainEqual({ existing: true })
+  })
+})
+
+// The fresh-visitor baseline `update`: mode baseline applied on top of the
+// denied default so a fresh opt-out visitor upgrades to granted. GPC still
+// clamps; a returning visitor never takes this path.
+describe('pushGoogleConsentBaselineUpdate', () => {
+  it('does nothing when the feature is off', () => {
+    configureConsent({
+      googleConsentMode: false,
+      categories: [NECESSARY, ANALYTICS],
+    })
+    pushGoogleConsentBaselineUpdate()
+    expect((window as W).dataLayer).toBeUndefined()
+  })
+
+  it('opt-out: upgrades enabled categories to granted', () => {
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-out',
+      categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
+    })
+    pushGoogleConsentBaselineUpdate()
+    const u = lastCommand('update')!
+    expect(u.analytics_storage).toBe('granted')
+    expect(u.ad_personalization).toBe('granted')
+    expect(u.security_storage).toBe('granted')
+  })
+
+  it('opt-in: re-states the denied baseline', () => {
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-in',
+      categories: [NECESSARY, ANALYTICS],
+    })
+    pushGoogleConsentBaselineUpdate()
+    const u = lastCommand('update')!
+    expect(u.analytics_storage).toBe('denied')
+    expect(u.security_storage).toBe('granted')
+  })
+
+  it('GPC forces clamped signals denied even for an enabled opt-out category', () => {
+    vi.mocked(hasGpcSignal).mockReturnValue(true)
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-out',
+      allowGpcOverride: false,
+      categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
+    })
+    pushGoogleConsentBaselineUpdate()
+    const u = lastCommand('update')!
+    expect(u.analytics_storage).toBe('denied') // clamp beats enabled
+    expect(u.security_storage).toBe('granted') // necessary not clamped
+  })
+
+  it('GPC clamp holds even under allowGpcOverride (baseline has no saved opt-in)', () => {
+    vi.mocked(hasGpcSignal).mockReturnValue(true)
+    configureConsent({
+      googleConsentMode: true,
+      mode: 'opt-out',
+      allowGpcOverride: true,
+      categories: [NECESSARY, { ...ANALYTICS, enabled: true }],
+    })
+    pushGoogleConsentBaselineUpdate()
+    // Override only lets a *saved* opt-in flip the signal — the fresh baseline
+    // has none, so GPC still clamps it denied.
+    expect(lastCommand('update')!.analytics_storage).toBe('denied')
   })
 })
 

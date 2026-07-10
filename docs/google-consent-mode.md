@@ -43,13 +43,14 @@ baseline:
   tag.
 
 - **opt-out (consent-by-default, CCPA):** `mode: 'opt-out'`, consent-gated
-  categories `enabled: true`. The `default` emits **granted** for a fresh
-  visitor; opting out (or GPC) pushes an `update` flipping the signals to
-  `denied`. Tags usually load unblocked, so there's typically nothing to
-  re-activate on opt-out — commonly pair with `reloadOnConsentChange: false`.
-  Also inline the [synchronous `<head>` default](#synchronous-head-default)
-  above the GTM snippet so a returning opted-out visitor defaults `denied`
-  synchronously.
+  categories `enabled: true`. A fresh visitor is granted by a mode-baseline
+  `update` once the bundle runs; opting out (or GPC) pushes an `update` flipping
+  the signals to `denied`. Tags usually load unblocked, so there's typically
+  nothing to re-activate on opt-out — commonly pair with
+  `reloadOnConsentChange: false`. If your tag loads *unblocked*, also inline the
+  [synchronous `<head>` default](#synchronous-head-default) above the GTM snippet
+  so a returning opted-out visitor is `denied` synchronously (see Model A vs B
+  below).
 
 **GPC is honored in both modes** — a GPC visitor's `analytics_storage`/`ad_*`
 come out `denied` by default. This holds **even under `allowGpcOverride`**:
@@ -64,81 +65,73 @@ with no saved opt-in defaults denied. The same rule governs the category's
 ## Synchronous `<head>` default
 
 The init-time `default` runs inside the deferred bundle — **after** any Google
-tag already in `<head>`. For opt-out especially, that risks a returning
-opted-out visitor being granted-then-flipped.
+tag already in `<head>`. Whether that's a race depends on how your Google tag is
+gated:
 
-`renderGoogleConsentDefaultScript()` returns a `<script>` string to inline
-**above** the GTM/gtag snippet so a consent `default` is set before the
-container loads. Unlike a hand-authored snippet it is **cookie-aware and
-GPC-aware** — a returning opted-out visitor gets `denied` synchronously:
+- **`type="text/plain"`, released by this bundle (Model A).** The tag is inert
+  until the bundle flips it, and the bundle sets the consent `default` *before*
+  releasing the tag — so the tag can never fire early. **There is no race, and
+  you don't need a `<head>` script at all.** This is the common setup with
+  vanilla-cookieconsent managing your GTM/gtag tag.
+
+- **Loaded *unblocked* (Model B).** The Google tag loads and reads the consent
+  `default` on its own, early — before the deferred bundle runs. A returning
+  opted-out visitor risks being fired granted, then flipped to denied. This is
+  the only case the `<head>` script is for (typical of opt-out / "advanced"
+  Consent Mode with cookieless modeling).
+
+For **Model B**, inline `renderGoogleConsentDefaultScript()`'s output **above**
+the GTM/gtag snippet:
 
 ```ts
 import { configureConsent, renderGoogleConsentDefaultScript } from '@kraftwerkdesign/consent'
 import { consentConfig } from './consent.config'
 
-// Framework-agnostic — emit the string server-side, above your GTM snippet.
-configureConsent(consentConfig) // the same config object passed to initConsent()
-const headHtml = renderGoogleConsentDefaultScript()
+configureConsent(consentConfig)
+const headHtml = renderGoogleConsentDefaultScript() // '' when googleConsentMode is off
 ```
 
-Call it **after** `configureConsent()`, with the same config you pass to
-`initConsent()` — it reads from the resolved config store, not the raw
-overrides. It returns `''` when `googleConsentMode` is off.
+It emits a **static, denied-by-default** snippet — Google's own canonical
+baseline with `wait_for_update: 500`. It carries **no config**: nothing to
+duplicate from your `consent.config`, hand-edit, or regenerate, and it's
+byte-identical for every site (safe to serve from any static/CDN cache). It
+solves the race by **construction** — nothing starts granted, so the only flips
+are the safe `denied → granted` ones the deferred bundle pushes as an `update`:
 
-The returned script reads `document.cookie` and
-`navigator.globalPrivacyControl` at **runtime**, so it stays correct
-per-visitor even served from a static/CDN cache. Its per-signal derivation
-matches the init-time `default` exactly (a parity test guarantees it): no saved
-cookie → the mode baseline; a valid saved cookie → the visitor's actual
-acceptance (OR-merged); GPC → clamped signals `denied` unless a saved opt-in
-under `allowGpcOverride`. `readOnly` categories stay `granted`. Cookie parsing
-lives entirely in the package — consumers never touch the cookie JSON.
+- **Returning granted visitor** — starts denied, upgraded to granted once the
+  bundle runs. `wait_for_update: 500` holds the tag's first pings up to 500ms, so
+  a timely bundle loses nothing (a slower bundle costs only first-ping modeling
+  fidelity, never compliance — denied is always the safe side).
+- **Returning opted-out visitor** — denied, and stays denied. This is the flip
+  the script exists to prevent.
+- **Fresh opt-out visitor** — denied synchronously, then upgraded to granted by
+  the bundle's mode-baseline `update` on load. Consent-by-default is preserved,
+  just a beat later.
 
 ## Server-rendered / Twig (Craft, PHP) sites
 
-`renderGoogleConsentDefaultScript()` is a function — it's no help on a Twig
-site with no JS runtime to call it. For the **default** config shipped in
-`config.default.ts`, the block below is that same function's output,
-pre-generated and ready to paste as-is into `_layout.twig`'s `<head>`,
-**above** the GTM/gtag snippet:
+Because the snippet is config-free, there's nothing to generate or bake in — and
+`renderGoogleConsentDefaultScript()` being a JS function is no obstacle on a Twig
+site. Paste the fixed block straight into `_layout.twig`'s `<head>`, **above**
+the GTM/gtag snippet:
 
-<!-- gcm-default-script:start -->
 ```html
-<script>(function(){
-var P={"rx":"(?:^|;\\s*)kd_cookie_consent=([^;]*)","override":false,"categories":[{"id":"necessary","enabled":true,"readOnly":true,"clamped":false,"google":["security_storage","functionality_storage"]},{"id":"analytics","enabled":false,"readOnly":false,"clamped":true,"google":["analytics_storage","ad_storage","ad_user_data","ad_personalization"]}]};
-var saved=null;
-try{var m=document.cookie.match(new RegExp(P.rx));if(m){var v=JSON.parse(decodeURIComponent(m[1]));if(v&&Array.isArray(v.categories))saved=v.categories;}}catch(e){}
-var gpc=navigator.globalPrivacyControl===true;
-var s={};
-for(var i=0;i<P.categories.length;i++){
-var c=P.categories[i],granted;
-if(c.readOnly){granted=true;}
-else{var off=c.clamped&&gpc;if(saved){granted=(off&&!P.override)?false:saved.indexOf(c.id)!==-1;}else{granted=c.enabled&&!off;}}
-for(var j=0;j<c.google.length;j++){var sig=c.google[j];if(s[sig]==='granted')continue;s[sig]=granted?'granted':'denied';}
-}
-s.wait_for_update=500;
-window.dataLayer=window.dataLayer||[];
-var gtag=window.gtag||(window.gtag=function(){window.dataLayer.push(arguments);});
-gtag('consent','default',s);
-})();</script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() { dataLayer.push(arguments); }
+  gtag('consent', 'default', {
+    security_storage: 'granted',
+    functionality_storage: 'granted',
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'denied',
+    wait_for_update: 500,
+  });
+</script>
 ```
-<!-- gcm-default-script:end -->
 
-This is exactly what
-`configureConsent({ googleConsentMode: true })` +
-`renderGoogleConsentDefaultScript()` produces for an otherwise-default config
-(a test in the repo asserts this block never drifts from that output). If your
-project overrides `cookieName`, `categories`, or `allowGpcOverride`, hand-edit
-the embedded `P = {…}` object to match:
-
-- `P.rx` — the regex used to find the consent cookie; derived from `cookieName`,
-  so swap in your cookie name if you override it.
-- `P.categories[]` — one entry per category with a `google` list, each with
-  `id`, `enabled` (the mode baseline), `readOnly` (necessary categories),
-  `clamped` (subject to the GPC clamp), and `google` (the signals it grants).
-  Add/remove/edit entries to match your `categories` config.
-- `P.override` — your `allowGpcOverride` setting.
-
-If you're rendering pages from Node (or any JS/TS build/render step) instead of
-Twig, skip the hand-editing — call `renderGoogleConsentDefaultScript()`
-directly at build/render time and it will always match your actual config.
+That's the whole integration — the same fixed snippet for every site, no
+per-config edits (denying is always the safe side, so it holds even if you remap
+signals). **If your Google tag is `type="text/plain"` and released by the bundle
+(Model A), you don't need this block at all.**

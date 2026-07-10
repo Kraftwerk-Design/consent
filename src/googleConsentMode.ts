@@ -1,8 +1,6 @@
 import { hasConsent } from './analytics'
-import { getConsentConfig, isGpcClamped } from './config'
+import { getConsentConfig, gpcClampedOff } from './config'
 import type { ConsentCategory } from './config.default'
-import { readConsentCookie } from './consentCookie'
-import { hasGpcSignal } from './gpc'
 
 type ConsentSignalState = 'granted' | 'denied'
 
@@ -45,129 +43,88 @@ export function getGtag(): (...args: unknown[]) => void {
 }
 
 /**
- * Whether a category counts as granted for the *default* command. Shared by the
- * init-time push and the inline `<head>` script so the two never diverge.
- *
- * - readOnly (necessary) categories are always granted, even if a stale cookie
- *   predates them being saved.
- * - No saved cookie → mode baseline (`enabled`), with GPC forcing clamped
- *   categories off regardless of `allowGpcOverride`.
- * - Valid saved cookie → the visitor's actual acceptance, except a GPC-clamped
- *   category stays denied unless the visitor saved an opt-in *and*
- *   `allowGpcOverride` is on. Mirrors `hasConsent`'s GPC clamp.
- */
-export function categoryGrantedByDefault(
-  category: ConsentCategory,
-  saved: string[] | null,
-  gpcActive: boolean,
-): boolean {
-  if (category.readOnly) return true
-
-  const clampedOff = isGpcClamped(category.id) && gpcActive
-
-  if (saved) {
-    if (clampedOff && !getConsentConfig().allowGpcOverride) return false
-    return saved.includes(category.id)
-  }
-
-  return (category.enabled ?? false) && !clampedOff
-}
-
-/**
  * Push the Consent Mode `default` command once, at init, before GTM reads it.
- * Cookie-aware: a returning visitor's saved choice drives the default so it
- * never diverges from the synchronous inline `<head>` default
- * ({@link renderGoogleConsentDefaultScript}). A fresh visitor falls back to the
- * mode baseline. GPC forces clamped signals denied unless a saved opt-in under
- * `allowGpcOverride`.
+ *
+ * Denied-by-default: consent-gated signals start `denied` and `readOnly`
+ * (necessary) signals `granted`, regardless of mode, cookie, or GPC. The only
+ * flips that can follow are `denied → granted` (the safe direction), never
+ * `granted → denied`. This mirrors the static `<head>` snippet
+ * ({@link renderGoogleConsentDefaultScript}) exactly, so the two never diverge.
+ *
+ * A returning visitor's real choice, and a fresh opt-out visitor's granted
+ * baseline, are applied afterward as an `update` — see
+ * {@link pushGoogleConsentUpdate} / {@link pushGoogleConsentBaselineUpdate}.
  */
 export function pushGoogleConsentDefault(): void {
   if (typeof window === 'undefined') return
   if (!getConsentConfig().googleConsentMode) return
-  const saved = readConsentCookie(
-    document.cookie,
-    getConsentConfig().cookieName,
-  )
-  const gpcActive = hasGpcSignal()
-  const signals = computeSignals((category) =>
-    categoryGrantedByDefault(category, saved?.categories ?? null, gpcActive),
-  )
+  const signals = computeSignals((category) => category.readOnly ?? false)
   getGtag()('consent', 'default', { ...signals, wait_for_update: 500 })
 }
 
-/** Escape regex metacharacters so a cookie name is matched literally. */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 /**
- * Serialize a config payload for embedding in an inline `<script>`. Escapes the
- * characters that could break out of the script element (`<`) or a JS string
- * literal (the U+2028 / U+2029 line separators).
+ * Push the mode-baseline as an `update`, for a *fresh* visitor with no recorded
+ * choice. In opt-out this upgrades enabled categories `denied → granted`
+ * (consent-by-default), closing the gap left by the denied `default`; in opt-in
+ * it re-states the denied baseline (a harmless no-op against the default). GPC
+ * still forces clamped categories `denied` (via {@link gpcClampedOff}).
+ *
+ * A returning visitor goes through {@link pushGoogleConsentUpdate} instead —
+ * never this — so a saved opt-out is honored.
  */
-function serializeForScript(value: unknown): string {
-  return JSON.stringify(value)
-    .replace(/</g, '\\u003c')
-    .replace(/[\u2028\u2029]/g, (ch) => '\\u' + ch.charCodeAt(0).toString(16))
+export function pushGoogleConsentBaselineUpdate(): void {
+  if (typeof window === 'undefined') return
+  if (!getConsentConfig().googleConsentMode) return
+  const signals = computeSignals(
+    (category) =>
+      (category.readOnly ?? false) ||
+      ((category.enabled ?? false) && !gpcClampedOff(category.id)),
+  )
+  getGtag()('consent', 'update', signals)
 }
 
 /**
- * Build a synchronous, cookie-aware, GPC-aware Consent Mode `default` script for
- * inlining in `<head>` *above* the Google tag/GTM container — solving the race
- * where the init-time default (inside the deferred bundle) runs after the tag.
+ * The synchronous Consent Mode `default` script to inline in `<head>` **above**
+ * an *unblocked* Google tag/GTM container (Model B), solving the race where the
+ * init-time default (inside the deferred bundle) runs after the tag.
  *
- * Framework-agnostic: returns a complete `<script>…</script>` string the
- * consumer emits server-side. All per-visitor state is read at *runtime* inside
- * the returned script (`document.cookie` + `navigator.globalPrivacyControl`), so
- * the string is a config constant safe to serve from a static/CDN cache — it
- * never bakes one visitor's consent into the page. Returns `''` when
- * `googleConsentMode` is off.
+ * It is a **static** snippet — denied-by-default with `wait_for_update: 500`,
+ * Google's own canonical baseline. It carries **no config**: nothing to
+ * duplicate from `consent.config`, hand-edit, or regenerate. The race is solved
+ * by construction — nothing starts granted, so the only flips are the safe
+ * `denied → granted` ones the deferred bundle pushes as an `update`. Returning
+ * granted visitors upgrade once the bundle runs (held by `wait_for_update`).
  *
- * The derivation matches the init-time default's category-by-category
- * grant logic and signal aggregation exactly — guaranteed by a parity test —
- * so the inline and init-time defaults never diverge. Consumers never parse
- * the consent cookie themselves.
+ * If your Google tag is `type="text/plain"` and released by this bundle
+ * (Model A), you do **not** need this at all — the bundle sets the default
+ * before it releases the tag, so the tag can never fire early.
+ *
+ * Returns `''` when `googleConsentMode` is off.
  */
 export function renderGoogleConsentDefaultScript(): string {
-  const config = getConsentConfig()
-  if (!config.googleConsentMode) return ''
-
-  const payload = {
-    rx: `(?:^|;\\s*)${escapeRegExp(config.cookieName)}=([^;]*)`,
-    override: config.allowGpcOverride,
-    categories: config.categories
-      .filter((category) => category.google && category.google.length > 0)
-      .map((category) => ({
-        id: category.id,
-        enabled: category.enabled ?? false,
-        readOnly: category.readOnly ?? false,
-        clamped: isGpcClamped(category.id),
-        google: category.google,
-      })),
-  }
-
-  // Mirrors categoryGrantedByDefault + computeSignals in vanilla JS so it can run
-  // before the bundle (and before vanilla-cookieconsent) loads.
-  const body = `(function(){
-var P=${serializeForScript(payload)};
-var saved=null;
-try{var m=document.cookie.match(new RegExp(P.rx));if(m){var v=JSON.parse(decodeURIComponent(m[1]));if(v&&Array.isArray(v.categories))saved=v.categories;}}catch(e){}
-var gpc=navigator.globalPrivacyControl===true;
-var s={};
-for(var i=0;i<P.categories.length;i++){
-var c=P.categories[i],granted;
-if(c.readOnly){granted=true;}
-else{var off=c.clamped&&gpc;if(saved){granted=(off&&!P.override)?false:saved.indexOf(c.id)!==-1;}else{granted=c.enabled&&!off;}}
-for(var j=0;j<c.google.length;j++){var sig=c.google[j];if(s[sig]==='granted')continue;s[sig]=granted?'granted':'denied';}
+  if (!getConsentConfig().googleConsentMode) return ''
+  return DEFAULT_HEAD_SCRIPT
 }
-s.wait_for_update=500;
-window.dataLayer=window.dataLayer||[];
-var gtag=window.gtag||(window.gtag=function(){window.dataLayer.push(arguments);});
-gtag('consent','default',s);
-})();`
 
-  return `<script>${body}</script>`
-}
+/**
+ * Google's canonical denied-by-default baseline. `readOnly` (necessary) signals
+ * granted, consent-gated signals denied — matching the shipped default config.
+ * Denying is always the safe side, so this stays correct even for sites that
+ * remap signals: the worst case is a necessary feature waiting for the bundle.
+ */
+const DEFAULT_HEAD_SCRIPT = `<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() { dataLayer.push(arguments); }
+  gtag('consent', 'default', {
+    security_storage: 'granted',
+    functionality_storage: 'granted',
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'denied',
+    wait_for_update: 500,
+  });
+</script>`
 
 /**
  * Push the Consent Mode `update` command on every consent change. Derives from

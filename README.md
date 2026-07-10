@@ -309,8 +309,8 @@ Both are **off by default** and feed consent state into third-party tags
 
 - **[Google Consent Mode v2](docs/google-consent-mode.md)** — set
   `googleConsentMode: true` and map each category's `google` signals. Pushes a
-  consent `default` at init and an `update` on change. Includes a
-  cookie/GPC-aware `<head>` script for opt-out and a ready-to-paste Twig block.
+  consent `default` at init and an `update` on change. Includes a static,
+  config-free `<head>` snippet for sites whose Google tag loads unblocked.
 - **[Meta Pixel](docs/meta-pixel.md)** — set `metaPixelConsentMode: true` and
   flag categories `meta: true`. Grants/revokes the pixel on consent change, with
   Limited Data Use (LDU) for US-state opt-outs.
@@ -445,7 +445,7 @@ src/
     └── consentPour.ts       <consent-pour> element (PourNow wine-finder facade)
 
 docs/
-├── google-consent-mode.md   Google Consent Mode v2 — mapping, <head> script, Twig block
+├── google-consent-mode.md   Google Consent Mode v2 — mapping, static <head> snippet
 ├── meta-pixel.md            Meta Pixel — grant/revoke, LDU, page-load PageView
 └── releasing.md             Automated version-bump → npm publish flow
 ```

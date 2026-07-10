@@ -78,9 +78,9 @@ describe('runConsent + Google Consent Mode', () => {
     )
     cfg.onChange!({} as never)
 
-    // With no recorded consent on this fresh load, runConsent's own `.then`
-    // pushes nothing — the only update comes from this onChange. Still assert
-    // on the LAST update so this stays robust if that changes.
+    // On this fresh load runConsent's `.then` pushes a mode-baseline update
+    // (denied here, opt-in default cats); this onChange then pushes the granted
+    // update. Assert on the LAST update so the baseline one doesn't confuse it.
     const updates = entries().filter(
       (e) => e[0] === 'consent' && e[1] === 'update',
     )
@@ -100,7 +100,7 @@ describe('runConsent + Google Consent Mode', () => {
     expect((window as W).dataLayer).toBeUndefined()
   })
 
-  it('does not clobber the granted opt-out default on a fresh (no-consent) load', async () => {
+  it('fresh opt-out load: denied default, then a granted baseline update', async () => {
     const optOutCats: ConsentCategory[] = [
       {
         id: 'necessary',
@@ -133,16 +133,21 @@ describe('runConsent + Google Consent Mode', () => {
 
     await runConsent()
 
+    // The synchronous default is denied (no early granted-then-flipped)...
     const defaults = entries().filter(
       (e) => e[0] === 'consent' && e[1] === 'default',
     )
     expect(
       (defaults[0][2] as Record<string, unknown>).analytics_storage,
-    ).toBe('granted')
+    ).toBe('denied')
 
+    // ...and the fresh-visitor baseline update upgrades opt-out to granted.
     const updates = entries().filter(
       (e) => e[0] === 'consent' && e[1] === 'update',
     )
-    expect(updates.length).toBe(0)
+    expect(updates.length).toBe(1)
+    expect((updates[0][2] as Record<string, unknown>).analytics_storage).toBe(
+      'granted',
+    )
   })
 })

@@ -1,7 +1,7 @@
 # Assume-denied Consent Mode default — design
 
 **Date:** 2026-07-10
-**Status:** Proposed (design), pending review
+**Status:** Approved; implemented on `feat/assume-denied-consent-default`
 
 ## Problem
 

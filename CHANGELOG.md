@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`renderGoogleConsentDefaultScript()` is now a static, denied-by-default
+  snippet.** It no longer serializes the consent config into the page: the
+  synchronous `<head>` default emits Google's canonical `denied` baseline with
+  `wait_for_update: 500`, config-free and byte-identical for every site. This
+  removes the config duplication (and hand-editing of an embedded `P` object)
+  that server-rendered/Twig sites had to maintain. The race is still solved —
+  now by construction, since nothing starts granted, so the only flips are the
+  safe `denied → granted` ones the bundle pushes as an `update`. A returning
+  granted visitor upgrades once the bundle runs (held by `wait_for_update`); a
+  fresh opt-out visitor is upgraded by a new mode-baseline `update` on load.
+  Sites whose Google tag is `type="text/plain"` and released by the bundle
+  (Model A) don't need the `<head>` snippet at all.
+- The init-time `gtag('consent','default',…)` push is likewise denied-by-default
+  (readOnly signals granted); per-visitor state is applied as an `update`.
 - **Docs:** README rewritten around usage/recipes; Google Consent Mode, Meta
   Pixel, and release docs moved to `docs/`. `lite-youtube`/`lite-vimeo` now
   documented as coming from `@kraftwerkdesign/kd-components`.
