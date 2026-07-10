@@ -183,4 +183,33 @@ describe('configureConsent runtime validation', () => {
 
     warnSpy.mockRestore()
   })
+
+  it('does not warn for the shipped defaults (no overrides)', () => {
+    // The defaults carry google/meta mappings with both consent modes off; that
+    // latent state must not warn against itself on a plain quick-start install.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    configureConsent()
+
+    expect(warnSpy).not.toHaveBeenCalled()
+
+    warnSpy.mockRestore()
+  })
+
+  it('still warns when a project authors categories with mappings but leaves the mode off', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    configureConsent({
+      categories: [
+        { id: 'necessary', enabled: true, readOnly: true },
+        { id: 'analytics', analytics: true, google: ['analytics_storage'], meta: true },
+      ],
+    })
+
+    const warned = warnSpy.mock.calls.map((c) => c[0] as string)
+    expect(warned.some((w) => /google/i.test(w))).toBe(true)
+    expect(warned.some((w) => /meta/i.test(w))).toBe(true)
+
+    warnSpy.mockRestore()
+  })
 })

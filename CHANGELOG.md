@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `configureConsent()` no longer emits spurious "google/meta flag set while
+  consent mode is off" warnings for the shipped defaults — a plain quick-start
+  install (no `categories` override) now runs clean. The signal-mapping checks
+  only apply to categories the project authored; `validateConsentConfig()`
+  gained a `{ checkSignalMappings }` option (default `true`) to control this.
+
+### Changed
+
+- **Docs:** README rewritten around usage/recipes; Google Consent Mode, Meta
+  Pixel, and release docs moved to `docs/`. `lite-youtube`/`lite-vimeo` now
+  documented as coming from `@kraftwerkdesign/kd-components`.
+
 ## [0.6.0] - 2026-07-09
 
 API-hardening pass from a multi-agent API review. Contains breaking changes.

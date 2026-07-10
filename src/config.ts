@@ -21,7 +21,14 @@ export function configureConsent(
 ): ConsentConfig {
   resolved = deepMerge(defaultConsentConfig, overrides)
 
-  for (const warning of validateConsentConfig(resolved)) {
+  // The shipped defaults deliberately carry `google`/`meta` mappings so that
+  // flipping `googleConsentMode`/`metaPixelConsentMode` on "just works" with no
+  // category rework. Those mappings are therefore only a footgun when the
+  // *project* authored them — so skip the signal-mapping checks unless this
+  // project overrode `categories`.
+  for (const warning of validateConsentConfig(resolved, {
+    checkSignalMappings: overrides.categories !== undefined,
+  })) {
     console.warn('[consent] ' + warning)
   }
 
@@ -38,8 +45,16 @@ export function getConsentConfig(): Readonly<ConsentConfig> {
  * silently at runtime (a gate that always returns false, signals nobody ever
  * sends). Returns human-readable warning strings; empty when the config is
  * clean. Never throws.
+ *
+ * `checkSignalMappings` (default `true`) gates the "google/meta flag set while
+ * its consent mode is off" checks. `configureConsent()` turns it off when the
+ * project didn't override `categories`, so the shipped defaults' latent
+ * `google`/`meta` mappings don't warn against themselves.
  */
-export function validateConsentConfig(config: ConsentConfig): string[] {
+export function validateConsentConfig(
+  config: ConsentConfig,
+  { checkSignalMappings = true }: { checkSignalMappings?: boolean } = {},
+): string[] {
   const warnings: string[] = []
 
   // Duplicate category ids — later entries silently shadow earlier ones.
@@ -84,7 +99,7 @@ export function validateConsentConfig(config: ConsentConfig): string[] {
   }
 
   // Google Consent Mode signals configured but the signaling itself is off.
-  if (!config.googleConsentMode) {
+  if (checkSignalMappings && !config.googleConsentMode) {
     for (const category of config.categories) {
       if (category.google && category.google.length > 0) {
         warnings.push(
@@ -95,7 +110,7 @@ export function validateConsentConfig(config: ConsentConfig): string[] {
   }
 
   // Meta Pixel grant configured but the signaling itself is off.
-  if (!config.metaPixelConsentMode) {
+  if (checkSignalMappings && !config.metaPixelConsentMode) {
     for (const category of config.categories) {
       if (category.meta) {
         warnings.push(

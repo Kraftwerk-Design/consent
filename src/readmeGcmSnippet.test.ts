@@ -14,20 +14,21 @@ const START_MARKER = '<!-- gcm-default-script:start -->'
 const END_MARKER = '<!-- gcm-default-script:end -->'
 
 /**
- * Pull the pasted `<script>` block out of the README's "Server-rendered /
- * Twig (Craft, PHP) sites" subsection: the text between the drift-guard HTML
- * comments, with the surrounding ```html fence lines and whitespace stripped.
+ * Pull the pasted `<script>` block out of the "Server-rendered / Twig (Craft,
+ * PHP) sites" section of docs/google-consent-mode.md: the text between the
+ * drift-guard HTML comments, with the surrounding ```html fence lines and
+ * whitespace stripped.
  */
 function extractReadmeGcmSnippet(): string {
-  // Vitest always runs with the repo root (where README.md lives) as cwd.
-  const readmePath = `${process.cwd()}/README.md`
-  const readme = readFileSync(readmePath, 'utf8')
+  // Vitest always runs with the repo root as cwd.
+  const docPath = `${process.cwd()}/docs/google-consent-mode.md`
+  const readme = readFileSync(docPath, 'utf8')
 
   const start = readme.indexOf(START_MARKER)
   const end = readme.indexOf(END_MARKER)
   if (start === -1 || end === -1 || end < start) {
     throw new Error(
-      `Could not find ${START_MARKER}/${END_MARKER} markers in README.md`,
+      `Could not find ${START_MARKER}/${END_MARKER} markers in docs/google-consent-mode.md`,
     )
   }
 
@@ -36,7 +37,7 @@ function extractReadmeGcmSnippet(): string {
   const lines = between.split('\n')
   if (lines[0]?.trim() !== '```html' || lines[lines.length - 1]?.trim() !== '```') {
     throw new Error(
-      'Expected the README gcm-default-script block to be wrapped in a ```html fence',
+      'Expected the docs gcm-default-script block to be wrapped in a ```html fence',
     )
   }
 
