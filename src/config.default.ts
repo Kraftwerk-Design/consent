@@ -15,6 +15,14 @@ export interface AutoClearCookie {
   name: string | RegExp
 }
 
+/** Age-gate persistence. See {@link ConsentConfig.ageGate}. */
+export interface AgeGateConfig {
+  /** First-party cookie recording a passed gate. */
+  cookieName: string
+  /** Lifetime of a passed gate, in days. Defaults to 30. */
+  maxAgeDays?: number
+}
+
 /** Copy for a category's section in the preferences modal. */
 export interface CategoryCopy {
   title: string
@@ -74,6 +82,11 @@ export interface ConsentConfig {
    * Falls back to the category flagged `analytics: true`, then `'analytics'`.
    */
   gateCategory?: string
+  /**
+   * Hold the entire consent stack until the visitor passes a site-rendered age
+   * gate (`confirmAge()`). Off when omitted.
+   */
+  ageGate?: AgeGateConfig
   /** Custom DOM event dispatched when consent changes. */
   consentChangeEvent: string
   /** sessionStorage key — GPC acknowledgment banner dismissed this session. */

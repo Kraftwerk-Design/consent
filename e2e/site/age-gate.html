@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Age gate</title>
+    <link rel="stylesheet" href="/node_modules/vanilla-cookieconsent/dist/cookieconsent.css" />
+    <script>
+      if (document.cookie.split(/;\s*/).includes('e2e_age_verified=1'))
+        document.documentElement.classList.add('age-verified')
+    </script>
+    <style>
+      .age-verified #age-gate {
+        display: none;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "vanilla-cookieconsent": "/node_modules/vanilla-cookieconsent/dist/cookieconsent.esm.js",
+          "@kraftwerkdesign/consent": "/dist/index.js"
+        }
+      }
+    </script>
+    <script type="text/plain" data-category="necessary">
+      window.necessaryRan = true
+    </script>
+    <script type="text/plain" data-category="analytics">
+      window.analyticsRan = true
+    </script>
+    <script type="module">
+      import { initConsent, confirmAge } from '@kraftwerkdesign/consent'
+      window.consentReady = initConsent({
+        cookieName: 'e2e_consent',
+        ageGate: { cookieName: 'e2e_age_verified' },
+      })
+      document.querySelector('#age-yes').addEventListener('click', () => {
+        confirmAge()
+        document.documentElement.classList.add('age-verified')
+      })
+    </script>
+  </head>
+  <body>
+    <div id="age-gate">
+      <p>Are you of legal drinking age?</p>
+      <button id="age-yes">Yes</button>
+    </div>
+    <script>
+      window.gateShownAtParse =
+        getComputedStyle(document.querySelector('#age-gate')).display !== 'none'
+    </script>
+    <h1>Age gate</h1>
+  </body>
+</html>

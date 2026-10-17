@@ -5,6 +5,7 @@ import {
   getConsentConfig,
 } from './config'
 import { hasGpcSignal } from './gpc'
+import { isAgeVerified } from './ageGate'
 
 /**
  * Whether the given consent category is granted. GPC forces a *clamped*
@@ -15,6 +16,8 @@ import { hasGpcSignal } from './gpc'
 export function hasConsent(
   categoryId: string = defaultGateCategoryId(),
 ): boolean {
+  if (!isAgeVerified()) return false
+
   if (
     isGpcClamped(categoryId) &&
     hasGpcSignal() &&
@@ -44,6 +47,8 @@ export function hasConsent(
  * section, so the parameter has no effect on what's shown.
  */
 export function promptConsent(_categoryId?: string): void {
+  if (!isAgeVerified()) return
+
   if (!CookieConsent.validConsent()) {
     CookieConsent.show()
     return

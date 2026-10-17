@@ -8,6 +8,7 @@ import {
   getConsentConfig,
 } from './config'
 import { hasGpcSignal } from './gpc'
+import { isAgeVerified, whenAgeConfirmed } from './ageGate'
 import {
   pushGoogleConsentDefault,
   pushGoogleConsentUpdate,
@@ -38,9 +39,20 @@ function applyGpcIfNeeded(): void {
   CookieConsent.acceptCategory([])
 }
 
+/**
+ * Mirrors vanilla-cookieconsent's `hideFromBots` check: for these agents it
+ * never builds the UI, so `show()` would throw.
+ */
+function isBot(): boolean {
+  return (
+    /bot|crawl|spider|slurp|teoma/i.test(navigator.userAgent) ||
+    navigator.webdriver
+  )
+}
+
 /** Show an informational banner confirming GPC was honored. */
 function showGpcBannerIfNeeded(): void {
-  if (!hasGpcSignal()) return
+  if (!hasGpcSignal() || isBot()) return
   if (sessionStorage.getItem(getConsentConfig().gpcBannerAckKey) === '1') return
 
   CookieConsent.show(true)
@@ -54,17 +66,15 @@ export function buildCategories(
 
   for (const category of getConsentConfig().categories) {
     // GPC forces a clamped category off by default whenever a signal is present
-    // — regardless of `allowGpcOverride`. Override only governs whether the
-    // toggle stays operable (readOnly below) and whether a saved opt-in persists
-    // via the cookie; it must not leave the category on-by-default for a GPC
-    // visitor (which would fire opt-out `enabled: true` tags against the signal).
+    // — regardless of `allowGpcOverride` — so opt-out `enabled: true` tags never
+    // fire against the signal. Never mark it `readOnly` to lock it:
+    // vanilla-cookieconsent always accepts readOnly categories. The lock is
+    // `lockGpcToggles()` instead.
     const gpcClamped = isGpcClamped(category.id) && gpcActive
 
     categories[category.id] = {
       enabled: gpcClamped ? false : (category.enabled ?? false),
-      readOnly:
-        (category.readOnly ?? false) ||
-        (gpcClamped && !getConsentConfig().allowGpcOverride),
+      readOnly: category.readOnly ?? false,
       ...(category.autoClear
         ? { autoClear: { cookies: category.autoClear } }
         : {}),
@@ -72,6 +82,16 @@ export function buildCategories(
   }
 
   return categories
+}
+
+/** Disable the (unchecked) preference toggles of GPC-clamped categories. */
+function lockGpcToggles(modal: HTMLElement): void {
+  for (const id of gpcClampedCategoryIds()) {
+    const toggle = modal.querySelector<HTMLInputElement>(
+      `input.section__toggle[value="${id}"]`,
+    )
+    if (toggle) toggle.disabled = true
+  }
 }
 
 let hasRun = false
@@ -102,6 +122,8 @@ export function __resetConsentRunForTests(): void {
  * second call logs a `console.warn` and resolves immediately without
  * touching `CookieConsent.run` or re-dispatching, rather than running its own
  * continuation against a config the banner never adopted.
+ *
+ * With `ageGate` configured, everything above waits for `confirmAge()`.
  */
 export function runConsent(): Promise<void> {
   if (hasRun) {
@@ -112,6 +134,11 @@ export function runConsent(): Promise<void> {
   }
   hasRun = true
 
+  if (isAgeVerified()) return startConsent()
+  return whenAgeConfirmed().then(startConsent)
+}
+
+function startConsent(): Promise<void> {
   const config = getConsentConfig()
   const gpcActive = hasGpcSignal()
 
@@ -160,6 +187,16 @@ export function runConsent(): Promise<void> {
       pushGoogleConsentUpdate()
       pushMetaPixelConsentUpdate()
       reloadIfNeeded()
+    },
+
+    onModalReady: ({ modalName, modal }) => {
+      if (
+        modalName === 'preferencesModal' &&
+        gpcActive &&
+        !config.allowGpcOverride
+      ) {
+        lockGpcToggles(modal)
+      }
     },
 
     onModalHide: ({ modalName }) => {

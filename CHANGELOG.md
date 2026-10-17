@@ -5,6 +5,23 @@ All notable changes to `@kraftwerkdesign/consent` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `ageGate: { cookieName, maxAgeDays? }` config plus `isAgeVerified()` /
+  `confirmAge()`. When set, the whole consent stack (banner, script release,
+  Consent Mode/Meta signals, `hasConsent()`) is held until the visitor passes a
+  site-rendered age gate. Passing never grants consent or overrides GPC.
+- Playwright e2e suite (`npm run test:e2e`) against fixture pages in `e2e/site/`.
+
+### Fixed
+
+- GPC without `allowGpcOverride` accepted and released the clamped category's
+  scripts: the lock marked it `readOnly`, which vanilla-cookieconsent always
+  accepts. The preference toggle is now disabled instead.
+- GPC visitors detected as bots (`hideFromBots`) made `initConsent()` reject.
+
 ## [0.7.0] - 2026-07-10
 
 ### Fixed

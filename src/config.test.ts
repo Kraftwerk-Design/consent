@@ -107,6 +107,24 @@ describe('validateConsentConfig', () => {
     expect(warnings.some((w) => /analytics: true/.test(w))).toBe(true)
   })
 
+  it.each([0, -1, NaN])('flags ageGate.maxAgeDays of %s', (maxAgeDays) => {
+    const warnings = validateConsentConfig({
+      ...cleanConfig,
+      ageGate: { cookieName: 'age', maxAgeDays },
+    })
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/maxAgeDays/)
+  })
+
+  it('accepts a positive ageGate.maxAgeDays', () => {
+    expect(
+      validateConsentConfig({
+        ...cleanConfig,
+        ageGate: { cookieName: 'age', maxAgeDays: 0.5 },
+      }),
+    ).toEqual([])
+  })
+
   it('flags duplicate category ids', () => {
     const config: ConsentConfig = {
       ...cleanConfig,

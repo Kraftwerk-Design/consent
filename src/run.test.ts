@@ -32,15 +32,27 @@ beforeEach(() => {
 })
 
 describe('buildCategories GPC clamp', () => {
-  it('forces only clamped categories read-only when GPC is active', () => {
+  it('forces only clamped categories off when GPC is active', () => {
+    configureConsent({
+      mode: 'opt-out',
+      allowGpcOverride: false,
+      categories: [
+        { id: 'necessary', enabled: true, readOnly: true },
+        { id: 'functionality', enabled: true },
+        { id: 'analytics', analytics: true, enabled: true },
+      ],
+    })
     const cats = buildCategories(true) // gpcActive = true
-    expect(cats!.necessary.readOnly).toBe(true) // its own readOnly
-    expect(cats!.analytics.readOnly).toBe(true) // clamped
-    expect(cats!.functionality.readOnly).toBe(false) // not clamped
+    expect(cats!.necessary.enabled).toBe(true)
+    expect(cats!.analytics.enabled).toBe(false) // clamped
+    expect(cats!.functionality.enabled).toBe(true) // not clamped
   })
 
-  it('does not force clamp when GPC is inactive', () => {
-    const cats = buildCategories(false)
+  // vanilla-cookieconsent always accepts readOnly categories, so a readOnly
+  // clamp would release the very scripts GPC is meant to hold.
+  it('never marks a clamped category readOnly', () => {
+    const cats = buildCategories(true)
+    expect(cats!.necessary.readOnly).toBe(true) // its own readOnly
     expect(cats!.analytics.readOnly).toBe(false)
   })
 
@@ -49,11 +61,11 @@ describe('buildCategories GPC clamp', () => {
       allowGpcOverride: false,
       categories: [
         { id: 'analytics', analytics: true, gpc: true },
-        { id: 'marketing', gpc: true },
+        { id: 'marketing', gpc: true, enabled: true },
       ],
     })
     const cats = buildCategories(true)
-    expect(cats!.marketing.readOnly).toBe(true)
+    expect(cats!.marketing.enabled).toBe(false)
   })
 })
 
@@ -72,7 +84,7 @@ describe('buildCategories GPC enabled downgrade', () => {
     expect(cats!.analytics.readOnly).toBe(false) // …but the toggle stays operable
   })
 
-  it('forces a clamped category off and locked under GPC without override', () => {
+  it('forces a clamped category off under GPC without override', () => {
     configureConsent({
       mode: 'opt-out',
       allowGpcOverride: false,
@@ -83,7 +95,7 @@ describe('buildCategories GPC enabled downgrade', () => {
     })
     const cats = buildCategories(true)
     expect(cats!.analytics.enabled).toBe(false)
-    expect(cats!.analytics.readOnly).toBe(true)
+    expect(cats!.analytics.readOnly).toBe(false)
   })
 
   it('leaves an enabled category on by default when GPC is inactive', () => {

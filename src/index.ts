@@ -10,7 +10,10 @@ export type {
   GoogleConsentSignal,
   AutoClearCookie,
   CategoryCopy,
+  AgeGateConfig,
 } from './config.default'
+
+export { isAgeVerified, confirmAge } from './ageGate'
 
 export { hasGpcSignal } from './gpc'
 

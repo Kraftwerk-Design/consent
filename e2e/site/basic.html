@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Basic</title>
+    <link rel="stylesheet" href="/node_modules/vanilla-cookieconsent/dist/cookieconsent.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "vanilla-cookieconsent": "/node_modules/vanilla-cookieconsent/dist/cookieconsent.esm.js",
+          "@kraftwerkdesign/consent": "/dist/index.js"
+        }
+      }
+    </script>
+    <script type="text/plain" data-category="analytics">
+      window.analyticsRan = true
+    </script>
+    <script type="module">
+      import { initConsent } from '@kraftwerkdesign/consent'
+      window.consentReady = initConsent({ cookieName: 'e2e_consent' })
+    </script>
+  </head>
+  <body>
+    <h1>Basic</h1>
+  </body>
+</html>

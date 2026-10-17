@@ -285,7 +285,7 @@ informational banner confirming the signal was honored. GPC is detected
 client-side via `navigator.globalPrivacyControl` (cache-safe, no server header).
 
 <a id="gpc-details"></a>
-By default GPC is a **hard lock** — the analytics category is forced read-only
+By default GPC is a **hard lock** — the analytics toggle is disabled (off)
 and re-clamped to necessary-only on every load, so a visitor can never turn
 tracking back on. Set `allowGpcOverride: true` to treat GPC as an overridable
 *default* instead: analytics still starts off and the banner explains the
@@ -299,6 +299,60 @@ override where a genuine, user-initiated override is appropriate, and treat it
 as a compliance decision. The GPC spec explicitly contemplates it — *"a specific
 arrangement with that person may permit a website to ignore a generally
 applicable preference"* ([W3C GPC draft](https://w3c.github.io/gpc/)).
+
+---
+
+## Age gate
+
+For age-restricted sites (alcohol), set `ageGate` to hold the **entire** consent
+stack until the visitor passes a gate you render:
+
+```ts
+ageGate: { cookieName: 'acme_age_verified', maxAgeDays: 30 }
+```
+
+Until `confirmAge()` is called (or the cookie exists), nothing runs: no banner,
+no `text/plain` script release, no Consent Mode/Meta updates, `hasConsent()` is
+false for every category, and `requireConsent()`/`promptConsent()` do nothing.
+`initConsent()`'s promise resolves only after the gate passes and the banner
+initializes. After that the banner behaves normally — passing the gate never
+grants consent or overrides GPC.
+
+The library owns the state, not the UI. Your gate decides eligibility (yes/no,
+date of birth) and calls `confirmAge()` on a pass; it never receives the answer.
+
+```ts
+import { confirmAge, isAgeVerified } from '@kraftwerkdesign/consent'
+
+if (!isAgeVerified()) showGate()
+yesButton.onclick = () => { confirmAge(); hideGate() }
+```
+
+Render the gate in the page HTML (visible by default) and hide it before paint
+for returning visitors, so a statically cached page never flashes content:
+
+```html
+<script>
+  if (document.cookie.split(/;\s*/).includes('acme_age_verified=1'))
+    document.documentElement.classList.add('age-verified')
+</script>
+```
+
+Tag scripts that must wait for the gate but aren't consent-gated as
+`type="text/plain" data-category="necessary"`. Keep untagged scripts
+(`<noscript>` pixels, unblocked SDKs) out of the page — the gate can only hold
+what the consent stack controls.
+
+Scripts released by a mid-visit pass run after `load`/`DOMContentLoaded` have
+fired, so SDKs that boot on those events (e.g. Commerce7's
+`window.onload = loadScript`) won't start until the next page view. Load those
+ungated.
+
+The static [`<head>` Consent Mode default](docs/google-consent-mode.md#synchronous-head-default)
+is not held: it runs before the gate with every consent-gated signal `denied`
+(necessary signals `granted`). An unblocked Google tag (Model B) therefore loads
+before the pass and sends cookieless pings. Tag it `type="text/plain"` (Model A)
+to hold Google entirely.
 
 ---
 
@@ -329,6 +383,7 @@ to `config.default.ts`.
 | `privacyPolicyUrl` | Link shown in the preferences modal. |
 | `categories` | Full category list — **replaces** the default `necessary`/`analytics` set. |
 | `gateCategory` | Category id the gate helpers target when a gate names none. Falls back to the `analytics: true` category, then `'analytics'`. |
+| `ageGate` | `{ cookieName, maxAgeDays? }` — hold everything until `confirmAge()`. See [Age gate](#age-gate). |
 | `consentChangeEvent` | DOM event dispatched on change (default `consent:change`). `detail` is `{ accepted, categories }`. |
 | `allowGpcOverride` | Let visitors opt back into analytics despite a GPC signal (default `false`). See [GPC note](#gpc-details). |
 | `reloadOnConsentChange` | Reload on non-GPC change so blocked scripts activate (default `true`). Set `false` for SPA-style sites relying on live listeners. |
@@ -353,7 +408,7 @@ Fields on each `ConsentCategory` entry:
 |---|---|
 | `id` | Category id used by vanilla-cookieconsent. |
 | `enabled` | Start the category granted — set on necessary categories; under opt-out, also on consent-gated categories. |
-| `readOnly` | Locked on. GPC also forces clamped categories read-only. |
+| `readOnly` | Locked on. |
 | `analytics` | Marks the tracking bucket the JS gate helpers check. Set on exactly one category. |
 | `gpc` | Subject to the GPC clamp. When no category sets it, the default gate category is clamped. |
 | `meta` | Grants the [Meta Pixel](docs/meta-pixel.md) when consented. |
@@ -416,10 +471,11 @@ registers the window API and `data-require-consent` delegation.
 
 `initConsent`, `configureConsent`, `getConsentConfig`, `validateConsentConfig`,
 `runConsent`, `installWindowApi`, `defineConsentEmbed`, `defineConsentPour`,
-`setupConsentGate`, `renderGoogleConsentDefaultScript`, `hasGpcSignal`, the
+`setupConsentGate`, `renderGoogleConsentDefaultScript`, `hasGpcSignal`,
+`isAgeVerified`, `confirmAge`, the
 imperative API functions above, and types `ConsentConfig`, `ConsentCategory`,
 `ConsentApi`, `ConsentGate`, `GoogleConsentSignal`, `AutoClearCookie`,
-`CategoryCopy`.
+`CategoryCopy`, `AgeGateConfig`.
 
 ---
 
@@ -432,6 +488,7 @@ src/
 ├── config.ts                Runtime store: configureConsent() / getConsentConfig()
 ├── deepMerge.ts             Config deep-merge (arrays replace, undefined skipped)
 ├── gpc.ts                   Global Privacy Control detection
+├── ageGate.ts               Age-gate state: isAgeVerified() / confirmAge()
 ├── consentCookie.ts         Parses the saved cookie (single source of truth)
 ├── analytics.ts             has/require/prompt + event bus + installWindowApi()
 ├── googleConsentMode.ts     Google Consent Mode v2 pushes + renderGoogleConsentDefaultScript()
@@ -454,6 +511,8 @@ docs/
 
 ## Contributing & releasing
 
-Run `npm test` (Vitest) and `npm run typecheck` before pushing. Releasing is
+Run `npm test` (Vitest) and `npm run typecheck` before pushing.
+`npm run test:e2e` builds `dist/` and runs Playwright against the fixture pages
+in `e2e/site/` (first run: `npx playwright install chromium`). Releasing is
 automated via `npm run release:{patch,minor,major}` — see
 [docs/releasing.md](docs/releasing.md).

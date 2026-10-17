@@ -120,6 +120,13 @@ export function validateConsentConfig(
     }
   }
 
+  const maxAgeDays = config.ageGate?.maxAgeDays
+  if (maxAgeDays !== undefined && !(maxAgeDays > 0)) {
+    warnings.push(
+      `ageGate.maxAgeDays must be a positive number of days (got ${maxAgeDays}) — the age cookie would be deleted on write and the gate would return on the next page.`,
+    )
+  }
+
   return warnings
 }
 
