@@ -539,7 +539,7 @@ integration naming an unknown category, an unknown `reload` policy, the removed
 | `id` | Category id used by vanilla-cookieconsent. |
 | `enabled` | Start the category granted — set on necessary categories; under opt-out, also on consent-gated categories. |
 | `readOnly` | Locked on. |
-| `gpc` | Subject to the GPC clamp. When no category sets it, the gate category is clamped. |
+| `gpc` | Subject to the GPC clamp. When no category sets it, the gate category is clamped. Ignored on `readOnly` categories (validator warns). |
 | `autoClear` | Cookies cleared on opt-out — `[{ name: string \| RegExp }]`. |
 | `copy` | Preferences-modal section copy — `{ title, description }`. |
 
@@ -626,6 +626,7 @@ src/
 ├── copy/en.ts               Banner copy (GPC- and mode-aware); sections from categories
 ├── core/
 │   ├── controller.ts        initConsent / confirmAge / isAgeVerified; the page's one controller
+│   ├── categories.ts        GPC state + category plan (registration, clamp, effective consent)
 │   ├── library.ts           Only importer of vanilla-cookieconsent
 │   ├── snapshot.ts          computeSnapshot + equality
 │   └── reload.ts            shouldReload + reloadPage

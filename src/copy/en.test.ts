@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { configureConsent } from '../config'
-import type { GpcState } from '../core/snapshot'
+import type { GpcState } from '../core/categories'
 import { buildEnglishCopy } from './en'
 
 type Mode = 'opt-in' | 'opt-out'

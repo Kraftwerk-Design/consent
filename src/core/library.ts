@@ -1,72 +1,35 @@
 import * as CookieConsent from 'vanilla-cookieconsent'
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
 import { buildEnglishCopy } from '../copy/en'
-import { gpcClampedCategoryIds, type ResolvedConfig } from '../config'
-import type { GpcState } from './snapshot'
+import type { ResolvedConfig } from '../config'
+import type { CategoryPlan } from './categories'
 
 type Categories = NonNullable<CookieConsentConfig['categories']>
 
-/**
- * Build the vanilla-cookieconsent category map from config. Under the GPC lock
- * clamped categories are left out: the library then never collects their
- * scripts, no button or `acceptCategory()` call can release them, and their
- * preferences section renders without a toggle. Under `default-off` they are
- * registered but off by default.
- */
-export function buildCategories(config: ResolvedConfig, gpc: GpcState): Categories {
-  const clampedIds = gpcClampedCategoryIds(config)
-  const categories: Categories = {}
-
-  for (const category of config.categories) {
-    const clamped = gpc !== 'none' && clampedIds.includes(category.id)
-    if (clamped && gpc === 'locked') continue
-
-    categories[category.id] = {
-      enabled: clamped ? false : (category.enabled ?? false),
-      readOnly: category.readOnly ?? false,
-      ...(category.autoClear
-        ? { autoClear: { cookies: category.autoClear } }
-        : {}),
-    }
-  }
-
-  return categories
-}
-
-/** Erase the autoClear cookies of categories the lock keeps unregistered. */
-function eraseClampedCookies(config: ResolvedConfig): void {
-  const clampedIds = gpcClampedCategoryIds(config)
-  for (const category of config.categories) {
-    if (!clampedIds.includes(category.id) || !category.autoClear) continue
-    CookieConsent.eraseCookies(category.autoClear.map((cookie) => cookie.name))
-  }
+function libraryCategories(plan: CategoryPlan): Categories {
+  return Object.fromEntries(
+    Object.entries(plan.registered).map(([id, { enabled, readOnly, autoClear }]) => [
+      id,
+      { enabled, readOnly, ...(autoClear ? { autoClear: { cookies: autoClear } } : {}) },
+    ]),
+  )
 }
 
 /**
  * Keep off: the library's own click listener on the banner's necessary button
- * accepts necessary only and can't be removed, so intercept the click before
- * it. Save the current choice (or, before one, the registered defaults) minus
- * the clamped categories, which are off by default under `default-off`.
+ * accepts necessary only and can't be removed, so intercept the click before it.
  */
-function interceptKeepOff(
-  config: ResolvedConfig,
-  modal: HTMLElement,
-  categories: Categories,
-): void {
-  const clampedIds = gpcClampedCategoryIds(config)
-  const defaults = Object.keys(categories).filter(
-    (id) => categories[id].enabled || categories[id].readOnly,
-  )
+function interceptKeepOff(modal: HTMLElement, plan: CategoryPlan): void {
   modal.addEventListener(
     'click',
     (event) => {
       if (!(event.target as Element).closest('[data-role="necessary"]')) return
       event.stopPropagation()
-      const keep = CookieConsent.validConsent()
-        ? CookieConsent.getUserPreferences().acceptedCategories.filter(
-            (id) => !clampedIds.includes(id),
-          )
-        : defaults
+      const keep = plan.keepOff(
+        CookieConsent.validConsent()
+          ? CookieConsent.getUserPreferences().acceptedCategories
+          : null,
+      )
       CookieConsent.hide()
       CookieConsent.acceptCategory(keep)
     },
@@ -87,10 +50,10 @@ export interface LibraryCallbacks {
  */
 export function runLibrary(
   config: ResolvedConfig,
-  gpc: GpcState,
+  plan: CategoryPlan,
   on: LibraryCallbacks,
 ): Promise<void> {
-  const categories = buildCategories(config, gpc)
+  const { gpc } = plan
 
   const running = CookieConsent.run({
     mode: config.mode,
@@ -101,7 +64,7 @@ export function runLibrary(
 
     guiOptions: config.guiOptions,
 
-    categories,
+    categories: libraryCategories(plan),
 
     onFirstConsent: () => on.choice(),
 
@@ -111,13 +74,13 @@ export function runLibrary(
 
     onModalReady: ({ modalName, modal }) => {
       if (modalName === 'consentModal' && gpc === 'default-off') {
-        interceptKeepOff(config, modal, categories)
+        interceptKeepOff(modal, plan)
       }
     },
 
     language: (config.buildCopy ?? buildEnglishCopy)({ gpc, mode: config.mode }),
   })
-  if (gpc === 'locked') eraseClampedCookies(config)
+  CookieConsent.eraseCookies([...plan.erase])
 
   return running.then(() => on.load())
 }

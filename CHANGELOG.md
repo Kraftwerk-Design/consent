@@ -108,6 +108,9 @@ changes; no deprecation shims.
   had their scripts released, and `data-cc="accept-all"`, a custom `buildCopy`
   Accept all or `CookieConsent.acceptCategory()` could release clamped scripts.
 - The GPC lock rejected every non-necessary category, not only the clamped ones.
+- A readOnly category with `gpc: true` was dropped under the GPC lock while
+  `has()` reported it granted. readOnly categories are never clamped; the
+  validator warns about the flag.
 - **BREAKING:** fresh opt-out visitors: `hasConsent()` was false, embeds stayed
   blocked, `data-require-consent` blocked and the event said `accepted: false`
   while their scripts ran. `has()` and `detail.categories` are now true for

@@ -21,7 +21,8 @@ export { AGE_GATE_COOKIE } from './ageGate'
 export { hasGpcSignal } from './gpc'
 
 export type { ConsentApi } from './dom'
-export type { ConsentSnapshot, GpcState } from './core/snapshot'
+export type { ConsentSnapshot } from './core/snapshot'
+export type { GpcState } from './core/categories'
 export type { ReloadPolicy } from './core/reload'
 
 export { attachGate, defineGatedElement } from './elements/gated'

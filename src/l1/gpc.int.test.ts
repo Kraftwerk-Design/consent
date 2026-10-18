@@ -193,6 +193,24 @@ describe('GPC lock', () => {
     expect(toggle('analytics')).toBeNull()
   })
 
+  it('a readOnly category flagged gpc is never clamped', async () => {
+    setGpc(true)
+    const { pkg } = await load(script('necessary'))
+    await init(
+      pkg,
+      config('opt-in', {
+        categories: [
+          { id: 'necessary', enabled: true, readOnly: true, gpc: true },
+          { id: 'analytics', gpc: true },
+        ],
+      }),
+    )
+    click(BANNER_ACCEPT_ALL)
+
+    expect(runs('necessary')).toBe(1)
+    expect(handle().has('necessary')).toBe(true)
+  })
+
   it('S-N2 custom buildCopy gets the GPC state and cannot add a toggle for the clamped category', async () => {
     const buildCopy = vi.fn(customCopy)
     const { lib } = await lockedOptIn(script('analytics'), { buildCopy })
@@ -264,6 +282,26 @@ describe('GPC override', () => {
     expect(handle().has('functionality')).toBe(true)
     expect(handle().has('analytics')).toBe(false)
     expect(document.documentElement.classList).not.toContain('show--consent')
+  })
+
+  it('a readOnly category flagged gpc stays readOnly and runs', async () => {
+    setGpc(true)
+    const { pkg, lib } = await load(script('necessary'))
+    await init(
+      pkg,
+      config('opt-in', {
+        ...OVERRIDE,
+        categories: [
+          { id: 'necessary', enabled: true, readOnly: true, gpc: true },
+          { id: 'analytics', gpc: true },
+        ],
+      }),
+    )
+    click(BANNER_KEEP_OFF)
+
+    expect(runs('necessary')).toBe(1)
+    expect(handle().has('necessary')).toBe(true)
+    expect(lib.getCookie('categories')).toEqual(['necessary'])
   })
 
   it('S-E5 returning visitor reopening the banner: Keep off keeps the saved rejection', async () => {

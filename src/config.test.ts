@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   configureConsent,
   defaultGateCategoryId,
-  gpcClampedCategoryIds,
   isGpcClamped,
   resolveConfig,
   validateConsentConfig,
@@ -34,26 +33,15 @@ describe('defaultGateCategoryId', () => {
   })
 })
 
-describe('GPC-clamped set', () => {
-  it('defaults to the default gate category when no gpc flags are set', () => {
-    configureConsent({
-      categories: [{ id: 'necessary' }, { id: 'analytics' }],
-    })
-    expect(gpcClampedCategoryIds()).toEqual(['analytics'])
-    expect(isGpcClamped('analytics')).toBe(true)
-    expect(isGpcClamped('necessary')).toBe(false)
-  })
-
-  it('uses exactly the gpc:true categories once any gpc flag is present', () => {
+describe('isGpcClamped', () => {
+  it('reads the configured clamp set', () => {
     configureConsent({
       categories: [
         { id: 'necessary' },
         { id: 'functionality', gpc: false },
-        { id: 'analytics', gpc: true },
         { id: 'marketing', gpc: true },
       ],
     })
-    expect(gpcClampedCategoryIds().sort()).toEqual(['analytics', 'marketing'])
     expect(isGpcClamped('functionality')).toBe(false)
     expect(isGpcClamped('marketing')).toBe(true)
   })
@@ -118,6 +106,19 @@ describe('validateConsentConfig', () => {
     }
     const warnings = validateConsentConfig(config)
     expect(warnings).toEqual([expect.stringMatching(/GPC clamp/)])
+  })
+
+  it('flags gpc: true on a readOnly category', () => {
+    const config: ConsentConfig = {
+      ...cleanConfig,
+      categories: [
+        { id: 'necessary', enabled: true, readOnly: true, gpc: true },
+        { id: 'analytics', gpc: true },
+      ],
+    }
+    expect(validateConsentConfig(config)).toEqual([
+      expect.stringMatching(/'necessary' is readOnly/),
+    ])
   })
 
   it('S-O2a flags an integration naming an unknown category', () => {

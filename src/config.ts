@@ -5,6 +5,7 @@ import {
   type AgeGateConfig,
   type ConsentConfig,
 } from './config.default'
+import { gpcClampedCategoryIds } from './core/categories'
 import { RELOAD_POLICIES } from './core/reload'
 
 export type { ConsentConfig } from './config.default'
@@ -115,10 +116,14 @@ export function validateConsentConfig(config: ConsentConfig): string[] {
     )
   }
 
-  const clampable = new Set(
-    config.categories.filter((category) => !category.readOnly).map((category) => category.id),
-  )
-  if (!gpcClampedCategoryIds(config).some((id) => clampable.has(id))) {
+  for (const category of config.categories) {
+    if (!category.readOnly || !category.gpc) continue
+    warnings.push(
+      `category '${category.id}' is readOnly, so gpc: true has no effect — readOnly categories are never clamped.`,
+    )
+  }
+
+  if (gpcClampedCategoryIds(config).length === 0) {
     warnings.push(
       'no configured category is subject to the GPC clamp — a Global Privacy Control signal turns nothing off. Set gpc: true on the tracking categories.',
     )
@@ -162,26 +167,7 @@ export function defaultGateCategoryId(
   return config.gateCategory ?? 'analytics'
 }
 
-/**
- * Category ids subject to the GPC clamp. If any category sets `gpc`, the set is
- * exactly the categories with `gpc: true`; otherwise it defaults to the default
- * gate category.
- */
-export function gpcClampedCategoryIds(
-  config: Readonly<ConsentConfig> = resolved,
-): string[] {
-  const anyGpcFlag = config.categories.some(
-    (category) => category.gpc !== undefined,
-  )
-  if (anyGpcFlag) {
-    return config.categories
-      .filter((category) => category.gpc)
-      .map((category) => category.id)
-  }
-  return [defaultGateCategoryId(config)]
-}
-
 /** Whether a category is subject to the GPC clamp. */
 export function isGpcClamped(categoryId: string): boolean {
-  return gpcClampedCategoryIds().includes(categoryId)
+  return gpcClampedCategoryIds(resolved).includes(categoryId)
 }

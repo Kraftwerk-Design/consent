@@ -10,9 +10,9 @@ import { AGE_GATE_COOKIE, hasAgeCookie, warnUngatedTags, writeAgeCookie } from '
 import { installDom } from '../dom'
 import { readState, resetLibrary, runLibrary, showConsentUi } from './library'
 import { reloadPage, shouldReload } from './reload'
+import { gpcState, planCategories } from './categories'
 import {
   computeSnapshot,
-  gpcState,
   pendingSnapshot,
   snapshotsEqual,
   type ConsentSnapshot,
@@ -133,7 +133,7 @@ function isolate(fn: () => void): void {
 
 function createController(options: Partial<ConsentConfig>): Controller {
   const config = configureConsent(options)
-  const gpc = gpcState(hasGpcSignal(), config.allowGpcOverride)
+  const plan = planCategories(config, gpcState(hasGpcSignal(), config.allowGpcOverride))
   const subscribers = new Set<ConsentListener>()
 
   let ageOk = !config.ageGate || hasAgeCookie(config.ageGate.cookieName)
@@ -142,8 +142,8 @@ function createController(options: Partial<ConsentConfig>): Controller {
   let destroyed = false
 
   const initial = ageOk
-    ? pendingSnapshot(config, gpc)
-    : computeSnapshot({ config, ageOk, gpc, recorded: false, accepted: [] })
+    ? pendingSnapshot(plan)
+    : computeSnapshot({ plan, ageOk, recorded: false, accepted: [] })
   let latest = initial
   let applied: ConsentSnapshot | null = null
 
@@ -151,7 +151,7 @@ function createController(options: Partial<ConsentConfig>): Controller {
   // already see the new state.
   const getSnapshot = (): ConsentSnapshot => {
     if (!running) return latest
-    const live = computeSnapshot({ config, ageOk, gpc, ...readState() })
+    const live = computeSnapshot({ plan, ageOk, ...readState() })
     if (!snapshotsEqual(latest, live)) latest = live
     return latest
   }
@@ -173,7 +173,7 @@ function createController(options: Partial<ConsentConfig>): Controller {
   }
 
   const start = (): Promise<void> => {
-    const ran = runLibrary(config, gpc, {
+    const ran = runLibrary(config, plan, {
       choice: () => refresh('choice'),
       load: () => refresh('load'),
     })

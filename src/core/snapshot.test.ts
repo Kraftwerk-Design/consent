@@ -1,42 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import type { ConsentCategory, ConsentConfig } from '../config.default'
-import { defaultConsentConfig } from '../config.default'
+import { resolveConfig } from '../config'
+import { planCategories, type GpcState } from './categories'
 import {
   computeSnapshot,
-  gpcState,
   pendingSnapshot,
   snapshotsEqual,
   type ConsentSnapshot,
   type SnapshotInput,
 } from './snapshot'
 
-const NECESSARY: ConsentCategory = { id: 'necessary', enabled: true, readOnly: true }
-const ANALYTICS: ConsentCategory = { id: 'analytics' }
-
-function cfg(
-  mode: 'opt-in' | 'opt-out',
-  categories: ConsentCategory[] = [
-    NECESSARY,
-    { ...ANALYTICS, enabled: mode === 'opt-out' },
-  ],
-): ConsentConfig {
-  return { ...defaultConsentConfig, mode, categories }
-}
+const plan = (gpc: GpcState = 'none') =>
+  planCategories(
+    resolveConfig({
+      mode: 'opt-in',
+      categories: [{ id: 'necessary', enabled: true, readOnly: true }, { id: 'analytics' }],
+    }),
+    gpc,
+  )
 
 function input(overrides: Partial<SnapshotInput>): SnapshotInput {
-  return {
-    config: cfg('opt-in'),
-    ageOk: true,
-    gpc: 'none',
-    recorded: false,
-    accepted: [],
-    ...overrides,
-  }
+  return { plan: plan(), ageOk: true, recorded: false, accepted: [], ...overrides }
 }
 
 describe('computeSnapshot', () => {
   it('pending: every category false', () => {
-    expect(pendingSnapshot(cfg('opt-out'), 'none')).toEqual({
+    expect(pendingSnapshot(plan())).toEqual({
       stage: 'pending',
       recorded: false,
       gpc: 'none',
@@ -52,76 +40,18 @@ describe('computeSnapshot', () => {
     expect(snapshot.categories).toEqual({ necessary: false, analytics: false })
   })
 
-  it('readOnly is true even when not accepted', () => {
-    expect(computeSnapshot(input({})).categories.necessary).toBe(true)
-  })
-
-  it.each<[string, Partial<SnapshotInput>, boolean]>([
-    ['recorded accepted', { recorded: true, accepted: ['analytics'] }, true],
-    ['recorded rejected', { recorded: true, accepted: ['necessary'] }, false],
-    [
-      'recorded accepted, GPC locked',
-      { recorded: true, accepted: ['analytics'], gpc: 'locked' },
-      false,
-    ],
-    [
-      'recorded accepted, GPC default-off keeps the saved opt-in',
-      { recorded: true, accepted: ['analytics'], gpc: 'default-off' },
-      true,
-    ],
-    [
-      'recorded rejected, opt-out ignores enabled',
-      { config: cfg('opt-out'), recorded: true, accepted: ['necessary'] },
-      false,
-    ],
-    ['unrecorded opt-out, enabled', { config: cfg('opt-out') }, true],
-    ['unrecorded opt-out, GPC locked', { config: cfg('opt-out'), gpc: 'locked' }, false],
-    [
-      'unrecorded opt-out, GPC default-off',
-      { config: cfg('opt-out'), gpc: 'default-off' },
-      false,
-    ],
-    [
-      'unrecorded opt-out, not enabled',
-      { config: cfg('opt-out', [NECESSARY, ANALYTICS]) },
-      false,
-    ],
-    ['unrecorded opt-in', { accepted: ['analytics'] }, false],
-  ])('%s → analytics %s', (_, overrides, expected) => {
-    const snapshot = computeSnapshot(input(overrides))
+  it("ready: the plan's effective categories", () => {
+    const snapshot = computeSnapshot(input({ recorded: true, accepted: ['analytics'] }))
     expect(snapshot.stage).toBe('ready')
-    expect(snapshot.categories.analytics).toBe(expected)
+    expect(snapshot.categories).toEqual({ necessary: true, analytics: true })
   })
 
-  it('GPC clamps only the gpc-flagged categories when any is flagged', () => {
-    const config = cfg('opt-out', [
-      NECESSARY,
-      { ...ANALYTICS, enabled: true },
-      { id: 'marketing', enabled: true, gpc: true },
-    ])
-    expect(computeSnapshot(input({ config, gpc: 'locked' })).categories).toEqual({
-      necessary: true,
-      analytics: true,
-      marketing: false,
-    })
-  })
-
-  it('carries recorded and gpc through', () => {
+  it('carries recorded and gpc through, frozen', () => {
     const snapshot = computeSnapshot(
-      input({ recorded: true, gpc: 'locked', accepted: ['necessary'] }),
+      input({ plan: plan('locked'), recorded: true, accepted: ['necessary'] }),
     )
     expect(snapshot).toMatchObject({ recorded: true, gpc: 'locked' })
-  })
-})
-
-describe('gpcState', () => {
-  it.each([
-    [false, false, 'none'],
-    [false, true, 'none'],
-    [true, false, 'locked'],
-    [true, true, 'default-off'],
-  ])('signal %s, override %s → %s', (signal, allowOverride, expected) => {
-    expect(gpcState(signal, allowOverride)).toBe(expected)
+    expect(Object.isFrozen(snapshot.categories)).toBe(true)
   })
 })
 

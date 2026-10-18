@@ -1,7 +1,8 @@
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
 import type { ResolvedConfig } from './config'
 import type { ReloadPolicy } from './core/reload'
-import type { ConsentSnapshot, GpcState } from './core/snapshot'
+import type { GpcState } from './core/categories'
+import type { ConsentSnapshot } from './core/snapshot'
 
 /** A cookie a category clears on opt-out. */
 export interface AutoClearCookie {
@@ -39,7 +40,7 @@ export interface ConsentCategory {
    * Subject to the GPC clamp: under a GPC signal it is not registered with the
    * banner and never effective (off by default with `allowGpcOverride`). When
    * no category sets this flag, the clamped set defaults to the default gate
-   * category.
+   * category. Ignored on readOnly categories.
    */
   gpc?: boolean
   /** Cookies cleared when this category is opted out of. */

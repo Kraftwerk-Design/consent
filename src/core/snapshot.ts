@@ -1,7 +1,4 @@
-import type { ConsentConfig } from '../config.default'
-import { gpcClampedCategoryIds } from '../config'
-
-export type GpcState = 'none' | 'default-off' | 'locked'
+import type { CategoryPlan, GpcState } from './categories'
 
 /** Effective consent state. Also the `consent:change` event detail. */
 export interface ConsentSnapshot {
@@ -14,20 +11,14 @@ export interface ConsentSnapshot {
 }
 
 export interface SnapshotInput {
-  config: Readonly<ConsentConfig>
+  plan: CategoryPlan
   ageOk: boolean
-  gpc: GpcState
   recorded: boolean
   accepted: readonly string[]
 }
 
-export function gpcState(signal: boolean, allowOverride: boolean): GpcState {
-  if (!signal) return 'none'
-  return allowOverride ? 'default-off' : 'locked'
-}
-
-function allFalse(config: Readonly<ConsentConfig>): Record<string, boolean> {
-  return Object.fromEntries(config.categories.map((category) => [category.id, false]))
+function allFalse(plan: CategoryPlan): Record<string, boolean> {
+  return Object.fromEntries(plan.ids.map((id) => [id, false]))
 }
 
 function freeze(snapshot: ConsentSnapshot): ConsentSnapshot {
@@ -36,40 +27,16 @@ function freeze(snapshot: ConsentSnapshot): ConsentSnapshot {
 }
 
 /** The snapshot before the library has reported any state. */
-export function pendingSnapshot(
-  config: Readonly<ConsentConfig>,
-  gpc: GpcState,
-): ConsentSnapshot {
-  return freeze({ stage: 'pending', recorded: false, gpc, categories: allFalse(config) })
+export function pendingSnapshot(plan: CategoryPlan): ConsentSnapshot {
+  return freeze({ stage: 'pending', recorded: false, gpc: plan.gpc, categories: allFalse(plan) })
 }
 
-export function computeSnapshot({
-  config,
-  ageOk,
-  gpc,
-  recorded,
-  accepted,
-}: SnapshotInput): ConsentSnapshot {
+export function computeSnapshot({ plan, ageOk, recorded, accepted }: SnapshotInput): ConsentSnapshot {
+  const { gpc } = plan
   if (!ageOk) {
-    return freeze({ stage: 'awaiting-age', recorded, gpc, categories: allFalse(config) })
+    return freeze({ stage: 'awaiting-age', recorded, gpc, categories: allFalse(plan) })
   }
-
-  const clamped = new Set(gpcClampedCategoryIds(config))
-  const categories: Record<string, boolean> = {}
-  for (const category of config.categories) {
-    const { id } = category
-    if (category.readOnly) {
-      categories[id] = true
-    } else if (recorded) {
-      categories[id] = accepted.includes(id) && !(gpc === 'locked' && clamped.has(id))
-    } else if (config.mode === 'opt-out') {
-      categories[id] = (category.enabled ?? false) && !(gpc !== 'none' && clamped.has(id))
-    } else {
-      categories[id] = false
-    }
-  }
-
-  return freeze({ stage: 'ready', recorded, gpc, categories })
+  return freeze({ stage: 'ready', recorded, gpc, categories: plan.effective({ recorded, accepted }) })
 }
 
 export function snapshotsEqual(a: ConsentSnapshot, b: ConsentSnapshot): boolean {
