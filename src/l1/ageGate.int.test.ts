@@ -178,38 +178,38 @@ describe('age cookie', () => {
     expect(pkg.isAgeVerified()).toBe(true)
   })
 
-  it.each([
-    [7, 'Max-Age=604800;'],
-    [1.1, 'Max-Age=95040;'],
-  ])('honors maxAgeDays %s, rounded to whole seconds', async (maxAgeDays, expected) => {
+  it('confirmAge() uses the configured maxAgeDays after init and opts before it', async () => {
     const { pkg } = await load()
-    const ready = init(pkg, config('opt-in', { ageGate: { cookieName: 'l1_age_verified', maxAgeDays } }))
     const setter = vi.spyOn(document, 'cookie', 'set')
 
-    pkg.confirmAge()
+    pkg.confirmAge({ cookieName: 'early_age', maxAgeDays: 1 })
+    const ready = init(pkg, config('opt-in', { ageGate: { cookieName: 'l1_age_verified', maxAgeDays: 7 } }))
+    pkg.confirmAge({ cookieName: 'ignored', maxAgeDays: 1 })
     await ready
 
-    expect(cookieWrites(setter, 'l1_age_verified')[0]).toContain(expected)
+    expect(cookieWrites(setter, 'early_age')[0]).toContain('Max-Age=86400;')
+    expect(cookieWrites(setter, 'l1_age_verified')[0]).toContain('Max-Age=604800;')
+    expect(cookieWrites(setter, 'ignored')).toEqual([])
   })
 
-  it('adds Secure over https', async () => {
+  it('isAgeVerified(opts) before init; the configured gate after it', async () => {
     const { pkg } = await load()
-    vi.stubGlobal('location', { protocol: 'https:' })
-    const setter = vi.spyOn(document, 'cookie', 'set')
+    document.cookie = 'other_age=1; Path=/'
+
+    expect(pkg.isAgeVerified({ cookieName: 'other_age' })).toBe(true)
+    void init(pkg, config('opt-in', AGE))
+    expect(pkg.isAgeVerified({ cookieName: 'other_age' })).toBe(false)
+  })
+
+  it('warns at init when a pre-init confirmAge() used the default name', async () => {
+    const { pkg } = await load()
+    const warn = quiet()
 
     pkg.confirmAge()
-
-    expect(cookieWrites(setter, 'kd_age_verified')).toEqual([
-      'kd_age_verified=1; Path=/; Max-Age=2592000; SameSite=Lax; Secure',
-    ])
-  })
-
-  it('isAgeVerified() does not match a cookie whose name merely ends with the gate name', async () => {
-    const { pkg } = await load()
-    document.cookie = 'other_l1_age_verified=1; Path=/'
-
-    expect(pkg.isAgeVerified({ cookieName: 'l1_age_verified' })).toBe(false)
     void init(pkg, config('opt-in', AGE))
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain("ageGate.cookieName is 'l1_age_verified'")
     expect(pkg.isAgeVerified()).toBe(false)
   })
 

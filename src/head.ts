@@ -1,4 +1,3 @@
-import { AGE_GATE_COOKIE } from './ageGate'
 import type { GoogleConsentSignal } from './integrations/google'
 
 /** Signals set by {@link GOOGLE_CONSENT_DEFAULT_HEAD}. */
@@ -38,19 +37,3 @@ ${Object.entries(GOOGLE_HEAD_SIGNALS)
   });
 </script>`
 
-/**
- * The `<head>` script that adds `className` (default `'age-verified'`) to
- * `<html>` before paint when the age cookie (default `AGE_GATE_COOKIE`) is
- * set, so CSS can hide the gate for returning visitors on cached pages.
- * Matches cookies exactly as `isAgeVerified()` does.
- */
-export function ageGateHeadScript({
-  cookieName = AGE_GATE_COOKIE,
-  className = 'age-verified',
-}: { cookieName?: string; className?: string } = {}): string {
-  const literal = (value: string): string => JSON.stringify(value).replace(/</g, '\\u003c')
-  return `<script>
-  if (document.cookie.split(/;\\s*/).includes(${literal(`${cookieName}=1`)}))
-    document.documentElement.classList.add(${literal(className)})
-</script>`
-}

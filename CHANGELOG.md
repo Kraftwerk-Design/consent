@@ -74,8 +74,9 @@ changes; no deprecation shims.
   script release (`necessary` included), no integration updates, no event.
   Only the deny-first defaults (Consent Mode `default`, Meta `revoke` when
   `fbq` exists) run before the gate. `confirmAge()` before init, or with no
-  gate, writes the cookie. With `ageGate` set, init warns about ungated
-  Google / Meta tags and an existing `window.fbq`. Passing never grants consent,
+  gate, writes the cookie its `opts` (`AgeGateConfig`) describe. With `ageGate`
+  set, init warns about ungated Google / Meta tags, an existing `window.fbq`,
+  and a pre-init pass written under the default name. Passing never grants consent,
   overrides GPC or reloads.
 - `ageGateHeadScript({ cookieName?, className? })`.
 - `ConsentHandle.subscribe` / `getSnapshot` (fit `useSyncExternalStore`) and

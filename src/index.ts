@@ -16,7 +16,7 @@ export type {
 
 export { confirmAge, isAgeVerified } from './core/controller'
 export type { ConsentHandle, ConsentListener } from './core/controller'
-export { AGE_GATE_COOKIE } from './ageGate'
+export { AGE_GATE_COOKIE, ageGateHeadScript } from './ageGate'
 
 export { hasGpcSignal } from './gpc'
 
@@ -32,7 +32,7 @@ export { googleConsentMode } from './integrations/google'
 export type { GoogleConsentMap, GoogleConsentSignal } from './integrations/google'
 export { metaPixel } from './integrations/meta'
 
-export { GOOGLE_CONSENT_DEFAULT_HEAD, ageGateHeadScript } from './head'
+export { GOOGLE_CONSENT_DEFAULT_HEAD } from './head'
 
 export { defineConsentEmbed } from './elements/embed'
 export { defineConsentPour } from './elements/pour'

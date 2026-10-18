@@ -57,7 +57,7 @@ export function installFakeController(defaultCategory = 'analytics'): FakeContro
       document.dispatchEvent(new Event(CONTROLLER_EVENT))
     },
   }
-  page[ACTIVE_CONTROLLER] = { handle, config: resolveConfig(), ageOk: () => true, confirmAge() {} }
+  page[ACTIVE_CONTROLLER] = { handle, config: resolveConfig(), ageGate: null }
   document.dispatchEvent(new Event(CONTROLLER_EVENT))
   return fake
 }

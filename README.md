@@ -427,13 +427,20 @@ yesButton.onclick = () => {
 ```
 
 `confirmAge()` writes the cookie, then releases the stack. Before
-`initConsent()` (or with no `ageGate`) it writes
-`opts.cookieName ?? AGE_GATE_COOKIE`; a later `initConsent()` with the same
-`ageGate.cookieName` then runs at once. `isAgeVerified(opts?)` resolves the
-name the same way: before `initConsent()` pass it
-(`isAgeVerified({ cookieName: 'acme_age_verified' })`); after it, it uses the
-configured name and is true when no `ageGate` is configured. `confirmAge` is
-also on `window.KDConsent`.
+`initConsent()` (or with no `ageGate`) it uses its `opts`, the same
+`{ cookieName?, maxAgeDays? }` shape as `ageGate`; a later `initConsent()`
+with the same `ageGate` then runs at once. Keep one object and pass it to
+`initConsent`, `confirmAge`, `isAgeVerified` and `ageGateHeadScript`:
+
+```ts
+const AGE = { cookieName: 'acme_age_verified', maxAgeDays: 30 }
+confirmAge(AGE) // before initConsent({ ageGate: AGE })
+```
+
+Init warns when a pre-init pass landed under the default name instead.
+`isAgeVerified(opts?)` checks the cookie `opts` names before `initConsent()`;
+after it, it uses the configured gate and is true when no `ageGate` is
+configured. `confirmAge` is also on `window.KDConsent`.
 
 ---
 
@@ -620,9 +627,9 @@ src/
 ├── config.ts                resolveConfig (frozen) + validateConsentConfig
 ├── deepMerge.ts             Config deep-merge (arrays replace, undefined skipped)
 ├── gpc.ts                   Global Privacy Control detection
-├── ageGate.ts               AGE_GATE_COOKIE, age cookie, warnUngatedTags()
+├── ageGate.ts               Age gate: cookie, pass, wait, head script, warnings
 ├── dom.ts                   window.KDConsent + data-require-consent listener
-├── head.ts                  GOOGLE_CONSENT_DEFAULT_HEAD + ageGateHeadScript()
+├── head.ts                  GOOGLE_CONSENT_DEFAULT_HEAD
 ├── copy/en.ts               Banner copy (GPC- and mode-aware); sections from categories
 ├── core/
 │   ├── controller.ts        initConsent / confirmAge / isAgeVerified; the page's one controller

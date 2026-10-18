@@ -194,10 +194,4 @@ describe('resolveConfig', () => {
     expect(config.integrations[0]).toBe(google)
     expect(Object.isFrozen(google)).toBe(false)
   })
-
-  it('fills in the age gate cookie name', () => {
-    expect(resolveConfig({ ageGate: {} }).ageGate?.cookieName).toBe('kd_age_verified')
-    expect(resolveConfig({ ageGate: { cookieName: 'x' } }).ageGate?.cookieName).toBe('x')
-    expect(resolveConfig().ageGate).toBeUndefined()
-  })
 })

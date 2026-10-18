@@ -3,9 +3,9 @@ import {
   validateConsentConfig,
   type ResolvedConfig,
 } from '../config'
-import type { ConsentConfig } from '../config.default'
+import type { AgeGateConfig, ConsentConfig } from '../config.default'
 import { hasGpcSignal } from '../gpc'
-import { AGE_GATE_COOKIE, hasAgeCookie, warnUngatedTags, writeAgeCookie } from '../ageGate'
+import { createAgeGate, warnDefaultNamePass, warnUngatedTags, type AgeGate } from '../ageGate'
 import { installDom } from '../dom'
 import { startLibrary, type ChangeCause, type LibrarySession } from './library'
 import { reloadPage, shouldReload } from './reload'
@@ -51,8 +51,8 @@ export interface ConsentHandle {
 export interface Controller {
   readonly handle: ConsentHandle
   readonly config: ResolvedConfig
-  ageOk(): boolean
-  confirmAge(): void
+  /** Null when no `ageGate` is configured. */
+  readonly ageGate: AgeGate | null
 }
 
 // On globalThis so every copy of this module (separate bundles, module resets
@@ -97,26 +97,23 @@ export function initConsent(options?: Partial<ConsentConfig>): ConsentHandle {
  * Input-agnostic: the site decides eligibility (yes/no, date of birth, …) and
  * calls this only on a pass. Never stores the answer itself.
  *
- * Writes the age cookie, then notifies the controller if one exists. The
- * cookie uses the configured `ageGate`, else `opts.cookieName ?? AGE_GATE_COOKIE`;
- * before `initConsent()`, init then finds it and runs at once.
+ * Writes the age cookie with the configured `ageGate`, else with `opts`
+ * (before `initConsent()`, or with no `ageGate`); a later `initConsent()`
+ * with the same options then runs at once.
  */
-export function confirmAge(opts: { cookieName?: string } = {}): void {
-  const current = active()
-  const gate = current?.config.ageGate
-  writeAgeCookie(gate?.cookieName ?? opts.cookieName ?? AGE_GATE_COOKIE, gate?.maxAgeDays)
-  current?.confirmAge()
+export function confirmAge(opts: AgeGateConfig = {}): void {
+  ;(active()?.ageGate ?? createAgeGate(opts)).confirm()
 }
 
 /**
- * Whether the visitor has passed the age gate. After `initConsent()`, true
- * when no `ageGate` is configured. Before it, checks the
- * `opts.cookieName ?? AGE_GATE_COOKIE` cookie.
+ * Whether the visitor has passed the age gate. After `initConsent()`, uses the
+ * configured `ageGate` and is true when none is configured. Before it, checks
+ * the cookie `opts` names.
  */
-export function isAgeVerified(opts: { cookieName?: string } = {}): boolean {
+export function isAgeVerified(opts: AgeGateConfig = {}): boolean {
   const current = active()
-  if (current) return current.ageOk()
-  return hasAgeCookie(opts.cookieName ?? AGE_GATE_COOKIE)
+  if (current) return current.ageGate?.passed() ?? true
+  return createAgeGate(opts).passed()
 }
 
 /** Run `fn`; report a throw without stopping the caller. */
@@ -136,14 +133,15 @@ function createController(options: Partial<ConsentConfig>): Controller {
   const plan = planCategories(config, gpcState(hasGpcSignal(), config.allowGpcOverride))
   const subscribers = new Set<ConsentListener>()
 
-  let ageOk = !config.ageGate || hasAgeCookie(config.ageGate.cookieName)
-  let startAfterAge: (() => void) | null = null
+  const ageGate = config.ageGate ? createAgeGate(config.ageGate) : null
+  const ageOk = (): boolean => ageGate?.passed() ?? true
+  let cancelAgeWait = (): void => {}
   let session: LibrarySession | null = null
   let destroyed = false
 
-  const initial = ageOk
+  const initial = ageOk()
     ? pendingSnapshot(plan)
-    : computeSnapshot({ plan, ageOk, recorded: false, accepted: [] })
+    : computeSnapshot({ plan, ageOk: false, recorded: false, accepted: [] })
   let latest = initial
   let applied: ConsentSnapshot | null = null
 
@@ -151,7 +149,7 @@ function createController(options: Partial<ConsentConfig>): Controller {
   // already see the new state.
   const getSnapshot = (): ConsentSnapshot => {
     if (!session) return latest
-    const live = computeSnapshot({ plan, ageOk, ...session.read() })
+    const live = computeSnapshot({ plan, ageOk: ageOk(), ...session.read() })
     if (!snapshotsEqual(latest, live)) latest = live
     return latest
   }
@@ -191,14 +189,17 @@ function createController(options: Partial<ConsentConfig>): Controller {
   }
 
   const removeDom = installDom({ has, require, prompt, confirmAge, getSnapshot })
-  if (config.ageGate) warnUngatedTags()
+  if (config.ageGate) {
+    warnDefaultNamePass(config.ageGate)
+    warnUngatedTags()
+  }
   for (const integration of config.integrations) isolate(() => integration.init?.(config))
 
-  const ready = ageOk
-    ? start()
-    : new Promise<void>((resolve) => {
-        startAfterAge = () => resolve(start())
-      })
+  const ready = new Promise<void>((resolve) => {
+    const run = (): void => resolve(start())
+    if (ageGate) cancelAgeWait = ageGate.onPass(run)
+    else run()
+  })
 
   const handle: ConsentHandle = {
     ready,
@@ -216,7 +217,7 @@ function createController(options: Partial<ConsentConfig>): Controller {
     destroy() {
       if (destroyed) return
       destroyed = true
-      startAfterAge = null
+      cancelAgeWait()
       subscribers.clear()
       removeDom()
       session?.reset()
@@ -229,14 +230,7 @@ function createController(options: Partial<ConsentConfig>): Controller {
   const controller: Controller = {
     handle,
     config,
-    ageOk: () => ageOk,
-    confirmAge() {
-      if (ageOk) return
-      ageOk = true
-      const go = startAfterAge
-      startAfterAge = null
-      go?.()
-    },
+    ageGate,
   }
   page[ACTIVE_CONTROLLER] = controller
   document.dispatchEvent(new Event(CONTROLLER_EVENT))

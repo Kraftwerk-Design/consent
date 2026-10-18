@@ -1,3 +1,4 @@
+import type { AgeGateConfig } from './config.default'
 import type { ConsentSnapshot } from './core/snapshot'
 
 /** Imperative consent API exposed on `window.KDConsent`. */
@@ -5,7 +6,7 @@ export interface ConsentApi {
   has(category?: string): boolean
   require(category?: string): boolean
   prompt(category?: string): void
-  confirmAge(opts?: { cookieName?: string }): void
+  confirmAge(opts?: AgeGateConfig): void
   getSnapshot(): ConsentSnapshot
 }
 

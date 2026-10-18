@@ -1,8 +1,6 @@
 import { deepMerge } from './deepMerge'
-import { AGE_GATE_COOKIE } from './ageGate'
 import {
   defaultConsentConfig,
-  type AgeGateConfig,
   type ConsentConfig,
 } from './config.default'
 import { defaultGateCategoryId, gpcClampedCategoryIds } from './core/categories'
@@ -12,14 +10,9 @@ export type { ConsentConfig } from './config.default'
 
 /**
  * Config after merging `initConsent()` options over the defaults. A deeply
- * frozen copy; `ageGate.cookieName` is filled in. Integrations are kept by
- * reference.
+ * frozen copy; integrations are kept by reference.
  */
-export type ResolvedConfig = Readonly<
-  Omit<ConsentConfig, 'ageGate'> & {
-    ageGate?: Readonly<AgeGateConfig & { cookieName: string }>
-  }
->
+export type ResolvedConfig = Readonly<ConsentConfig>
 
 /** Copy plain objects and arrays, then freeze the copies. Other values are kept. */
 function frozenCopy<T>(value: T): T {
@@ -44,9 +37,6 @@ function frozenCopy<T>(value: T): T {
  */
 export function resolveConfig(overrides: Partial<ConsentConfig> = {}): ResolvedConfig {
   const config = deepMerge(defaultConsentConfig, overrides)
-  if (config.ageGate) {
-    config.ageGate = { ...config.ageGate, cookieName: config.ageGate.cookieName ?? AGE_GATE_COOKIE }
-  }
   const { integrations, ...data } = config
   return Object.freeze({
     ...frozenCopy(data),
