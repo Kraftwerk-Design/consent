@@ -78,7 +78,12 @@ export function runLibrary(
       }
     },
 
-    language: (config.buildCopy ?? buildEnglishCopy)({ gpc, mode: config.mode }),
+    language: (config.buildCopy ?? buildEnglishCopy)({
+      gpc,
+      mode: config.mode,
+      categories: config.categories,
+      privacyPolicyUrl: config.privacyPolicyUrl,
+    }),
   })
   CookieConsent.eraseCookies([...plan.erase])
 

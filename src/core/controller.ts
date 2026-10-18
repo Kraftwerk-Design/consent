@@ -1,7 +1,6 @@
 import {
-  configureConsent,
-  defaultGateCategoryId,
-  resetConsentConfig,
+  resolveConfig,
+  validateConsentConfig,
   type ResolvedConfig,
 } from '../config'
 import type { ConsentConfig } from '../config.default'
@@ -10,7 +9,7 @@ import { AGE_GATE_COOKIE, hasAgeCookie, warnUngatedTags, writeAgeCookie } from '
 import { installDom } from '../dom'
 import { readState, resetLibrary, runLibrary, showConsentUi } from './library'
 import { reloadPage, shouldReload } from './reload'
-import { gpcState, planCategories } from './categories'
+import { defaultGateCategoryId, gpcState, planCategories } from './categories'
 import {
   computeSnapshot,
   pendingSnapshot,
@@ -132,7 +131,8 @@ function isolate(fn: () => void): void {
 }
 
 function createController(options: Partial<ConsentConfig>): Controller {
-  const config = configureConsent(options)
+  const config = resolveConfig(options)
+  for (const warning of validateConsentConfig(config)) console.warn('[consent] ' + warning)
   const plan = planCategories(config, gpcState(hasGpcSignal(), config.allowGpcOverride))
   const subscribers = new Set<ConsentListener>()
 
@@ -228,7 +228,6 @@ function createController(options: Partial<ConsentConfig>): Controller {
       if (running) resetLibrary()
       running = false
       page[ACTIVE_CONTROLLER] = null
-      resetConsentConfig()
       document.dispatchEvent(new Event(CONTROLLER_EVENT))
     },
   }

@@ -1,5 +1,4 @@
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
-import { getConsentConfig } from '../config'
 import type { CopyContext } from '../config.default'
 
 /**
@@ -11,9 +10,9 @@ import type { CopyContext } from '../config.default'
 export function buildEnglishCopy({
   gpc,
   mode,
+  categories,
+  privacyPolicyUrl,
 }: CopyContext): CookieConsentConfig['language'] {
-  const { privacyPolicyUrl, categories } = getConsentConfig()
-
   const consentDescription = {
     none: 'We use cookies to keep our site running and (with your consent) to understand how you found us and show you relevant ads. You can change your mind anytime.',
     locked:

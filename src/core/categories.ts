@@ -1,7 +1,12 @@
-import { defaultGateCategoryId, type ResolvedConfig } from '../config'
+import type { ResolvedConfig } from '../config'
 import type { AutoClearCookie, ConsentConfig } from '../config.default'
 
 export type GpcState = 'none' | 'default-off' | 'locked'
+
+/** Id of the category gate helpers target when a gate names none. */
+export function defaultGateCategoryId(config: Readonly<ConsentConfig>): string {
+  return config.gateCategory ?? 'analytics'
+}
 
 export function gpcState(signal: boolean, allowOverride: boolean): GpcState {
   if (!signal) return 'none'

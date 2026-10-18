@@ -2,7 +2,13 @@
 import { describe, it, expect } from 'vitest'
 import { resolveConfig } from '../config'
 import type { ConsentCategory } from '../config.default'
-import { gpcClampedCategoryIds, gpcState, planCategories, type GpcState } from './categories'
+import {
+  defaultGateCategoryId,
+  gpcClampedCategoryIds,
+  gpcState,
+  planCategories,
+  type GpcState,
+} from './categories'
 
 type Mode = 'opt-in' | 'opt-out'
 
@@ -14,6 +20,13 @@ const categories = (mode: Mode): ConsentCategory[] => [
 
 const plan = (mode: Mode, gpc: GpcState) =>
   planCategories(resolveConfig({ mode, categories: categories(mode) }), gpc)
+
+describe('defaultGateCategoryId', () => {
+  it("prefers an explicit gateCategory, else 'analytics'", () => {
+    expect(defaultGateCategoryId(resolveConfig({ gateCategory: 'functionality' }))).toBe('functionality')
+    expect(defaultGateCategoryId(resolveConfig())).toBe('analytics')
+  })
+})
 
 describe('gpcState', () => {
   it.each([

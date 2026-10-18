@@ -34,8 +34,8 @@ changes; no deprecation shims.
 - **BREAKING:** GPC: a fresh GPC visitor gets the normal banner with a GPC
   notice, and nothing is recorded automatically. Under the lock, clamped
   categories are not registered with vanilla-cookieconsent and their autoClear
-  cookies are erased. `buildCopy` receives a `CopyContext` `{ gpc, mode }`
-  instead of a boolean. GPC visitors follow the reload policy.
+  cookies are erased. `buildCopy` receives a `CopyContext`
+  `{ gpc, mode, categories, privacyPolicyUrl }` instead of a boolean. GPC visitors follow the reload policy.
 - **BREAKING:** reload: `reloadOnConsentChange` → `reload: 'never' |
   'on-withdraw' | 'on-change'`, default `'on-withdraw'`. Accepting and an
   opt-in reject no longer reload, so released scripts no longer run twice under

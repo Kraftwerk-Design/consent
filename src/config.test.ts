@@ -1,50 +1,12 @@
 // @vitest-environment node
-import { describe, it, expect, vi } from 'vitest'
-import {
-  configureConsent,
-  defaultGateCategoryId,
-  isGpcClamped,
-  resolveConfig,
-  validateConsentConfig,
-} from './config'
+import { describe, it, expect } from 'vitest'
+import { resolveConfig, validateConsentConfig } from './config'
 import { defaultConsentConfig, type ConsentConfig, type ConsentIntegration } from './config.default'
 
 const integration = (categories: string[]): ConsentIntegration => ({
   name: 'test',
   categories,
   apply() {},
-})
-
-describe('defaultGateCategoryId', () => {
-  it('prefers an explicit gateCategory', () => {
-    configureConsent({
-      gateCategory: 'functionality',
-      categories: [
-        { id: 'functionality' },
-        { id: 'analytics' },
-      ],
-    })
-    expect(defaultGateCategoryId()).toBe('functionality')
-  })
-
-  it("falls back to 'analytics'", () => {
-    configureConsent({ categories: [{ id: 'necessary' }, { id: 'analytics' }] })
-    expect(defaultGateCategoryId()).toBe('analytics')
-  })
-})
-
-describe('isGpcClamped', () => {
-  it('reads the configured clamp set', () => {
-    configureConsent({
-      categories: [
-        { id: 'necessary' },
-        { id: 'functionality', gpc: false },
-        { id: 'marketing', gpc: true },
-      ],
-    })
-    expect(isGpcClamped('functionality')).toBe(false)
-    expect(isGpcClamped('marketing')).toBe(true)
-  })
 })
 
 describe('validateConsentConfig', () => {
@@ -186,68 +148,6 @@ describe('validateConsentConfig', () => {
     expect(() =>
       validateConsentConfig({ ...cleanConfig, categories: [] }),
     ).not.toThrow()
-  })
-})
-
-describe('configureConsent runtime validation', () => {
-  it('warns when the options pass the removed reloadOnConsentChange', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    configureConsent({ reloadOnConsentChange: false } as Partial<ConsentConfig>)
-
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[consent\] reloadOnConsentChange/))
-    warnSpy.mockRestore()
-  })
-
-  it('console.warns each validation warning after merging overrides', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    configureConsent({
-      gateCategory: 'nonexistent',
-      categories: [{ id: 'necessary' }],
-    })
-
-    expect(warnSpy).toHaveBeenCalled()
-    for (const call of warnSpy.mock.calls) {
-      expect(call[0]).toMatch(/^\[consent\] /)
-    }
-
-    warnSpy.mockRestore()
-  })
-
-  it('does not warn for a clean config', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    configureConsent({
-      categories: [
-        { id: 'necessary', enabled: true, readOnly: true },
-        { id: 'analytics' },
-      ],
-    })
-
-    expect(warnSpy).not.toHaveBeenCalled()
-
-    warnSpy.mockRestore()
-  })
-
-  it('does not warn for the shipped defaults (no overrides)', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    configureConsent()
-
-    expect(warnSpy).not.toHaveBeenCalled()
-
-    warnSpy.mockRestore()
-  })
-
-  it('warns when an integration names a category the defaults lack', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    configureConsent({ integrations: [integration(['marketing'])] })
-
-    expect(warnSpy.mock.calls).toEqual([[expect.stringMatching(/^\[consent\] .*'marketing'/)]])
-
-    warnSpy.mockRestore()
   })
 })
 

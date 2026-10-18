@@ -215,7 +215,12 @@ describe('GPC lock', () => {
     const buildCopy = vi.fn(customCopy)
     const { lib } = await lockedOptIn(script('analytics'), { buildCopy })
 
-    expect(buildCopy).toHaveBeenCalledWith({ gpc: 'locked', mode: 'opt-in' })
+    expect(buildCopy).toHaveBeenCalledWith({
+      gpc: 'locked',
+      mode: 'opt-in',
+      categories: config('opt-in').categories,
+      privacyPolicyUrl: expect.any(String),
+    })
     lib.showPreferences()
     expect(toggle('necessary')).not.toBeNull()
     expect(toggle('analytics')).toBeNull()

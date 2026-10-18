@@ -322,9 +322,9 @@ as a compliance decision. The GPC spec explicitly contemplates it — *"a specif
 arrangement with that person may permit a website to ignore a generally
 applicable preference"* ([W3C GPC draft](https://w3c.github.io/gpc/)).
 
-`buildCopy` receives `{ gpc, mode }` (`gpc` is `'none'`,
-`'locked'` or `'default-off'`) to write copy for each case; custom copy cannot
-unlock a clamped category.
+`buildCopy` receives `{ gpc, mode, categories, privacyPolicyUrl }` (`gpc` is
+`'none'`, `'locked'` or `'default-off'`) to write copy for each case; custom
+copy cannot unlock a clamped category.
 
 ---
 
@@ -524,7 +524,7 @@ default in the table below. The config is frozen at init.
 | `reload` | `'on-withdraw'` (default), `'on-change'` or `'never'`. See [Reload](#reload). |
 | `integrations` | `googleConsentMode(…)`, `metaPixel(…)` or your own. None by default. See [Ad-tech](#ad-tech-consent-signaling). |
 | `guiOptions` | vanilla-cookieconsent layout/position. Default: `cloud` banner at `bottom center` with flipped buttons, `box` preferences modal, equal-weight buttons in both. |
-| `buildCopy` | `({ gpc, mode }) => language`: override banner/preferences copy wholesale (optional). Under GPC `default-off` the banner's necessary button is **Keep off**. |
+| `buildCopy` | `({ gpc, mode, categories, privacyPolicyUrl }) => language`: override banner/preferences copy wholesale (optional). Under GPC `default-off` the banner's necessary button is **Keep off**. |
 
 `initConsent()` runs `validateConsentConfig(config)` on the resolved config and
 `console.warn`s — never throws — on common mistakes: duplicate category ids, an

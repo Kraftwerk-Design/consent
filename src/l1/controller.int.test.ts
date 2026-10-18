@@ -83,6 +83,25 @@ describe('one controller per page', () => {
   })
 })
 
+describe('config validation', () => {
+  it('warns once per problem with the [consent] prefix', async () => {
+    const { pkg } = await load()
+    const warn = quiet()
+    await init(pkg, config('opt-in', { gateCategory: 'nonexistent' }))
+
+    expect(warn).toHaveBeenCalled()
+    for (const [message] of warn.mock.calls) expect(message).toMatch(/^\[consent\] /)
+  })
+
+  it('stays silent for the shipped defaults', async () => {
+    const { pkg } = await load()
+    const warn = quiet()
+    await init(pkg, {})
+
+    expect(warn).not.toHaveBeenCalled()
+  })
+})
+
 describe('S-I6 getSnapshot / subscribe', () => {
   it('notifies once per change after the event, with the previous snapshot', async () => {
     const { pkg, lib } = await load()

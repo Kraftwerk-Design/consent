@@ -1,12 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { configureConsent } from '../config'
+import { describe, it, expect } from 'vitest'
 import type { GpcState } from '../core/categories'
 import { buildEnglishCopy } from './en'
 
 type Mode = 'opt-in' | 'opt-out'
 
 function copy(gpc: GpcState, mode: Mode) {
-  const language = buildEnglishCopy({ gpc, mode })!
+  const language = buildEnglishCopy({
+    gpc,
+    mode,
+    categories: [{ id: 'necessary', readOnly: true }, { id: 'analytics' }],
+    privacyPolicyUrl: '/privacy',
+  })!
   const { consentModal, preferencesModal } = language.translations.en as {
     consentModal: Record<string, string | undefined>
     preferencesModal: {
@@ -31,10 +35,6 @@ function copy(gpc: GpcState, mode: Mode) {
 
 const PREFERENCES = ['Accept all', 'Reject non-essential', 'Save preferences']
 const MODES: Mode[] = ['opt-in', 'opt-out']
-
-beforeEach(() => {
-  configureConsent({ categories: [{ id: 'necessary', readOnly: true }, { id: 'analytics' }] })
-})
 
 describe('buildEnglishCopy', () => {
   it.each(MODES)('S-N1 no GPC (%s): Accept all / Manage preferences, no GPC notice', (mode) => {

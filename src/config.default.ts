@@ -139,6 +139,8 @@ export interface ConsentIntegration {
 export interface CopyContext {
   gpc: GpcState
   mode: ConsentConfig['mode']
+  categories: readonly ConsentCategory[]
+  privacyPolicyUrl: string
 }
 
 /** Defaults shared across Kraftwerk consent implementations. */

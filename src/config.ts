@@ -5,7 +5,7 @@ import {
   type AgeGateConfig,
   type ConsentConfig,
 } from './config.default'
-import { gpcClampedCategoryIds } from './core/categories'
+import { defaultGateCategoryId, gpcClampedCategoryIds } from './core/categories'
 import { RELOAD_POLICIES } from './core/reload'
 
 export type { ConsentConfig } from './config.default'
@@ -52,37 +52,6 @@ export function resolveConfig(overrides: Partial<ConsentConfig> = {}): ResolvedC
     ...frozenCopy(data),
     integrations: Object.freeze([...integrations]),
   }) as ResolvedConfig
-}
-
-let resolved: ResolvedConfig = resolveConfig()
-
-/**
- * Resolve and store the active config. Called once by the controller at init.
- *
- * Runs the resolved config through {@link validateConsentConfig} and
- * `console.warn`s any issues — never throws, so a misconfigured project keeps
- * running rather than crashing on load.
- */
-export function configureConsent(
-  overrides: Partial<ConsentConfig> = {},
-): ResolvedConfig {
-  resolved = resolveConfig(overrides)
-
-  for (const warning of validateConsentConfig(resolved)) {
-    console.warn('[consent] ' + warning)
-  }
-
-  return resolved
-}
-
-/** The active consent config (defaults until `configureConsent` runs). */
-export function getConsentConfig(): ResolvedConfig {
-  return resolved
-}
-
-/** Back to the defaults, when the controller is destroyed. */
-export function resetConsentConfig(): void {
-  resolved = resolveConfig()
 }
 
 /**
@@ -158,16 +127,4 @@ export function validateConsentConfig(config: ConsentConfig): string[] {
   }
 
   return warnings
-}
-
-/** Id of the category gate helpers target when a gate names none. */
-export function defaultGateCategoryId(
-  config: Readonly<ConsentConfig> = resolved,
-): string {
-  return config.gateCategory ?? 'analytics'
-}
-
-/** Whether a category is subject to the GPC clamp. */
-export function isGpcClamped(categoryId: string): boolean {
-  return gpcClampedCategoryIds(resolved).includes(categoryId)
 }
