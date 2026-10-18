@@ -1,8 +1,4 @@
-import {
-  resolveConfig,
-  validateConsentConfig,
-  type ResolvedConfig,
-} from '../config'
+import { resolveConfig, validateConsentConfig } from '../config'
 import type { AgeGateConfig, ConsentConfig } from '../config.default'
 import { hasGpcSignal } from '../gpc'
 import { createAgeGate, warnDefaultNamePass, warnUngatedTags, type AgeGate } from '../ageGate'
@@ -48,9 +44,9 @@ export interface ConsentHandle {
   destroy(): void
 }
 
+/** What the page's active controller shares with every copy of this module. */
 export interface Controller {
   readonly handle: ConsentHandle
-  readonly config: ResolvedConfig
   /** Null when no `ageGate` is configured. */
   readonly ageGate: AgeGate | null
 }
@@ -59,15 +55,37 @@ export interface Controller {
 // in tests) shares the page's one controller. Bump the version when
 // `Controller` changes shape so mismatched copies stay independent.
 const KEY = '@kraftwerkdesign/consent.controller@1'
-export const ACTIVE_CONTROLLER = Symbol.for(KEY)
-/** Dispatched on `document` when a controller becomes active and when it is destroyed. */
-export const CONTROLLER_EVENT = KEY
+const ACTIVE_CONTROLLER = Symbol.for(KEY)
+/** Dispatched on `document` when the active controller changes. */
+const CONTROLLER_EVENT = KEY
 const page = globalThis as { [ACTIVE_CONTROLLER]?: Controller | null }
 const active = (): Controller | null => page[ACTIVE_CONTROLLER] ?? null
 
 /** The live controller's handle; null before `initConsent()` and after `destroy()`. */
 export function activeHandle(): ConsentHandle | null {
   return active()?.handle ?? null
+}
+
+/**
+ * Make `controller` the page's active one and notify watchers. Returns the
+ * clear, which does nothing once another controller has replaced it.
+ */
+export function publishController(controller: Controller): () => void {
+  page[ACTIVE_CONTROLLER] = controller
+  document.dispatchEvent(new Event(CONTROLLER_EVENT))
+  return () => {
+    if (active() !== controller) return
+    page[ACTIVE_CONTROLLER] = null
+    document.dispatchEvent(new Event(CONTROLLER_EVENT))
+  }
+}
+
+/** Call `fn` with the active handle now and on every change. Returns the unsubscribe. */
+export function watchActiveHandle(fn: (handle: ConsentHandle | null) => void): () => void {
+  const notify = (): void => fn(activeHandle())
+  document.addEventListener(CONTROLLER_EVENT, notify)
+  notify()
+  return () => document.removeEventListener(CONTROLLER_EVENT, notify)
 }
 
 /**
@@ -89,7 +107,7 @@ export function initConsent(options?: Partial<ConsentConfig>): ConsentHandle {
     }
     return current.handle
   }
-  return createController(options ?? {}).handle
+  return createController(options ?? {})
 }
 
 /**
@@ -127,7 +145,7 @@ function isolate(fn: () => void): void {
   }
 }
 
-function createController(options: Partial<ConsentConfig>): Controller {
+function createController(options: Partial<ConsentConfig>): ConsentHandle {
   const config = resolveConfig(options)
   for (const warning of validateConsentConfig(config)) console.warn('[consent] ' + warning)
   const plan = planCategories(config, gpcState(hasGpcSignal(), config.allowGpcOverride))
@@ -222,18 +240,10 @@ function createController(options: Partial<ConsentConfig>): Controller {
       removeDom()
       session?.reset()
       session = null
-      page[ACTIVE_CONTROLLER] = null
-      document.dispatchEvent(new Event(CONTROLLER_EVENT))
+      unpublish()
     },
   }
 
-  const controller: Controller = {
-    handle,
-    config,
-    ageGate,
-  }
-  page[ACTIVE_CONTROLLER] = controller
-  document.dispatchEvent(new Event(CONTROLLER_EVENT))
-
-  return controller
+  const unpublish = publishController({ handle, ageGate })
+  return handle
 }

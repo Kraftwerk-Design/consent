@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { ACTIVE_CONTROLLER, CONTROLLER_EVENT, type ConsentHandle, type Controller } from '../core/controller'
-import { resolveConfig } from '../config'
+import { publishController, type ConsentHandle } from '../core/controller'
 import type { ConsentSnapshot } from '../core/snapshot'
 
 export interface FakeController {
@@ -41,7 +40,6 @@ export function installFakeController(defaultCategory = 'analytics'): FakeContro
     destroy: () => fake.destroy(),
   }
 
-  const page = globalThis as { [ACTIVE_CONTROLLER]?: Controller | null }
   const fake: FakeController = {
     handle,
     grant(...ids) {
@@ -52,13 +50,10 @@ export function installFakeController(defaultCategory = 'analytics'): FakeContro
     subscribers: () => subscribers.size,
     destroy() {
       subscribers.clear()
-      if (page[ACTIVE_CONTROLLER]?.handle !== handle) return
-      page[ACTIVE_CONTROLLER] = null
-      document.dispatchEvent(new Event(CONTROLLER_EVENT))
+      unpublish()
     },
   }
-  page[ACTIVE_CONTROLLER] = { handle, config: resolveConfig(), ageGate: null }
-  document.dispatchEvent(new Event(CONTROLLER_EVENT))
+  const unpublish = publishController({ handle, ageGate: null })
   return fake
 }
 

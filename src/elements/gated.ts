@@ -1,4 +1,4 @@
-import { activeHandle, CONTROLLER_EVENT } from '../core/controller'
+import { activeHandle, watchActiveHandle, type ConsentHandle } from '../core/controller'
 
 /**
  * Builds a gated element's content inside `host` and returns its teardown, or
@@ -30,23 +30,29 @@ const TOKEN = 'data-consent-gated'
  * removes the trigger listeners and unmounts.
  */
 export function attachGate(options: GateOptions): () => void {
-  return bindGate(options, { current: false })
-}
-
-// `intent` (the visitor clicked a trigger) outlives the binding so an element
-// re-bound after a move keeps a manual activation or a pending click.
-// `onRetire` runs after the binding's controller is destroyed or replaced.
-function bindGate(
-  { category, triggers, autoActivate, mount }: GateOptions,
-  intent: { current: boolean },
-  onRetire?: () => void,
-): () => void {
   const handle = activeHandle()
   if (!handle) {
     console.warn('[consent] attachGate() needs initConsent() first.')
     return () => {}
   }
+  const release = bindGate(handle, options, { current: false })
+  const detach = (): void => {
+    stopWatching()
+    release()
+  }
+  const stopWatching = watchActiveHandle((current) => {
+    if (current !== handle) detach()
+  })
+  return detach
+}
 
+// `intent` (the visitor clicked a trigger) outlives the binding so an element
+// re-bound after a move keeps a manual activation or a pending click.
+function bindGate(
+  handle: ConsentHandle,
+  { category, triggers, autoActivate, mount }: GateOptions,
+  intent: { current: boolean },
+): () => void {
   let granted = handle.has(category)
   let unmount: (() => void) | null = null
 
@@ -87,20 +93,11 @@ function bindGate(
   const release = (): void => {
     unsubscribe()
     for (const el of triggers) el?.removeEventListener('click', onTrigger)
-    document.removeEventListener(CONTROLLER_EVENT, retire)
     granted = false
     sync()
   }
 
-  const retire = (): void => {
-    if (activeHandle() === handle) return
-    intent.current = false
-    release()
-    onRetire?.()
-  }
-
   for (const el of triggers) el?.addEventListener('click', onTrigger)
-  document.addEventListener(CONTROLLER_EVENT, retire)
   sync()
 
   return release
@@ -129,24 +126,42 @@ export function defineGatedElement(tag: string, mount: Mount): void {
   class GatedElement extends HTMLElement {
     readonly #token = Math.random().toString(36).slice(2)
     readonly #intent = { current: false }
-    #detach: (() => void) | null = null
+    #handle: ConsentHandle | null = null
+    #unbind: (() => void) | null = null
+    #stopWatching: (() => void) | null = null
     #poster: HTMLElement | null = null
-    readonly #onController = (): void => {
-      if (this.isConnected && !this.#detach) this.connectedCallback()
-    }
 
     connectedCallback(): void {
-      if (this.#detach) return
+      this.#stopWatching = watchActiveHandle((handle) => {
+        if (this.#unbind) {
+          if (handle === this.#handle) return
+          this.#intent.current = false
+          this.#unbind()
+        }
+        this.#handle = handle
+        this.#unbind = this.#bind(handle)
+      })
+    }
+
+    disconnectedCallback(): void {
+      this.#stopWatching?.()
+      this.#stopWatching = null
+      queueMicrotask(() => {
+        if (this.isConnected || !this.#unbind) return
+        this.#unbind()
+        this.#unbind = null
+      })
+    }
+
+    #bind(handle: ConsentHandle | null): (() => void) | null {
       for (const node of this.#stamped()) {
         if (node.getAttribute(TOKEN) !== this.#token) node.remove()
       }
       this.#poster = this.querySelector('[data-poster]')
       this.#render(false)
-      if (!activeHandle()) {
-        document.addEventListener(CONTROLLER_EVENT, this.#onController, { once: true })
-        return
-      }
-      this.#detach = bindGate(
+      if (!handle) return null
+      return bindGate(
+        handle,
         {
           category: this.getAttribute('category') ?? undefined,
           triggers: [this.#poster],
@@ -154,20 +169,7 @@ export function defineGatedElement(tag: string, mount: Mount): void {
           mount: () => this.#mount(),
         },
         this.#intent,
-        () => {
-          this.#detach = null
-          if (this.isConnected) this.connectedCallback()
-        },
       )
-    }
-
-    disconnectedCallback(): void {
-      document.removeEventListener(CONTROLLER_EVENT, this.#onController)
-      queueMicrotask(() => {
-        if (this.isConnected || !this.#detach) return
-        this.#detach()
-        this.#detach = null
-      })
     }
 
     #stamped(): Element[] {
