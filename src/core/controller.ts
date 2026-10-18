@@ -7,7 +7,7 @@ import type { ConsentConfig } from '../config.default'
 import { hasGpcSignal } from '../gpc'
 import { AGE_GATE_COOKIE, hasAgeCookie, warnUngatedTags, writeAgeCookie } from '../ageGate'
 import { installDom } from '../dom'
-import { readState, resetLibrary, runLibrary, showConsentUi } from './library'
+import { startLibrary, type ChangeCause, type LibrarySession } from './library'
 import { reloadPage, shouldReload } from './reload'
 import { defaultGateCategoryId, gpcState, planCategories } from './categories'
 import {
@@ -138,7 +138,7 @@ function createController(options: Partial<ConsentConfig>): Controller {
 
   let ageOk = !config.ageGate || hasAgeCookie(config.ageGate.cookieName)
   let startAfterAge: (() => void) | null = null
-  let running = false
+  let session: LibrarySession | null = null
   let destroyed = false
 
   const initial = ageOk
@@ -150,13 +150,13 @@ function createController(options: Partial<ConsentConfig>): Controller {
   // Read live so scripts the library releases before its callbacks fire
   // already see the new state.
   const getSnapshot = (): ConsentSnapshot => {
-    if (!running) return latest
-    const live = computeSnapshot({ plan, ageOk, ...readState() })
+    if (!session) return latest
+    const live = computeSnapshot({ plan, ageOk, ...session.read() })
     if (!snapshotsEqual(latest, live)) latest = live
     return latest
   }
 
-  const refresh = (cause: 'load' | 'choice'): void => {
+  const refresh = (cause: ChangeCause): void => {
     if (destroyed) return
     const next = getSnapshot()
     if (next.stage === 'awaiting-age') return
@@ -173,21 +173,15 @@ function createController(options: Partial<ConsentConfig>): Controller {
   }
 
   const start = (): Promise<void> => {
-    const ran = runLibrary(config, plan, {
-      choice: () => refresh('choice'),
-      load: () => refresh('load'),
-    })
-    running = true
-    // A run() still in flight fails once destroy() resets the library.
-    return ran.catch((error) => (destroyed ? new Promise<void>(() => {}) : Promise.reject(error)))
+    session = startLibrary(config, plan, refresh)
+    return session.ready
   }
 
   const has = (category = defaultGateCategoryId(config)): boolean =>
     getSnapshot().categories[category] === true
 
   const prompt = (): void => {
-    if (destroyed || !running) return
-    showConsentUi()
+    session?.show()
   }
 
   const require = (category?: string): boolean => {
@@ -225,8 +219,8 @@ function createController(options: Partial<ConsentConfig>): Controller {
       startAfterAge = null
       subscribers.clear()
       removeDom()
-      if (running) resetLibrary()
-      running = false
+      session?.reset()
+      session = null
       page[ACTIVE_CONTROLLER] = null
       document.dispatchEvent(new Event(CONTROLLER_EVENT))
     },

@@ -37,23 +37,32 @@ function interceptKeepOff(modal: HTMLElement, plan: CategoryPlan): void {
   )
 }
 
-export interface LibraryCallbacks {
-  /** `onFirstConsent` / `onChange`: the visitor made a choice. */
-  choice(): void
-  /** `onConsent` and the resolved `run()`. */
-  load(): void
+export type ChangeCause = 'load' | 'choice'
+
+/** One run of the banner. */
+export interface LibrarySession {
+  /** Settles when `run()` does; stays pending after {@link LibrarySession.reset}. */
+  readonly ready: Promise<void>
+  /** The library's consent state. The cookie loads before `run()`'s first await, so this is current from the start. */
+  read(): { recorded: boolean; accepted: string[] }
+  /** The banner before a choice, the preferences after one. */
+  show(): void
+  /** Remove the library's DOM and tracked listeners; the consent cookie stays. */
+  reset(): void
 }
 
 /**
- * Run the banner for `config`. The cookie is loaded synchronously, before
- * `run()`'s first await, so {@link readState} is current once this returns.
+ * Run the banner for `config`. `onChanged` gets `'load'` once when `run()`
+ * resolves and `'choice'` on each visitor choice, possibly more than once per
+ * choice. `onConsent` is ignored: it only repeats one of those.
  */
-export function runLibrary(
+export function startLibrary(
   config: ResolvedConfig,
   plan: CategoryPlan,
-  on: LibraryCallbacks,
-): Promise<void> {
+  onChanged: (cause: ChangeCause) => void,
+): LibrarySession {
   const { gpc } = plan
+  let reset = false
 
   const running = CookieConsent.run({
     mode: config.mode,
@@ -66,11 +75,9 @@ export function runLibrary(
 
     categories: libraryCategories(plan),
 
-    onFirstConsent: () => on.choice(),
+    onFirstConsent: () => onChanged('choice'),
 
-    onConsent: () => on.load(),
-
-    onChange: () => on.choice(),
+    onChange: () => onChanged('choice'),
 
     onModalReady: ({ modalName, modal }) => {
       if (modalName === 'consentModal' && gpc === 'default-off') {
@@ -87,27 +94,30 @@ export function runLibrary(
   })
   CookieConsent.eraseCookies([...plan.erase])
 
-  return running.then(() => on.load())
-}
+  const pending = new Promise<void>(() => {})
+  const ready = running.then(
+    () => (reset ? pending : onChanged('load')),
+    // A run() still in flight fails once reset() tears the library down.
+    (error) => (reset ? pending : Promise.reject(error)),
+  )
 
-export function readState(): { recorded: boolean; accepted: string[] } {
   return {
-    recorded: CookieConsent.validConsent(),
-    accepted: CookieConsent.getUserPreferences().acceptedCategories,
+    ready,
+    read: () => ({
+      recorded: CookieConsent.validConsent(),
+      accepted: CookieConsent.getUserPreferences().acceptedCategories,
+    }),
+    show() {
+      if (!CookieConsent.validConsent()) {
+        CookieConsent.show()
+        return
+      }
+      CookieConsent.showPreferences()
+    },
+    reset() {
+      if (reset) return
+      reset = true
+      CookieConsent.reset(false)
+    },
   }
-}
-
-/** The banner before a choice, the preferences after one. */
-export function showConsentUi(): void {
-  if (!CookieConsent.validConsent()) {
-    CookieConsent.show()
-    return
-  }
-
-  CookieConsent.showPreferences()
-}
-
-/** Remove the library's DOM and tracked listeners; the consent cookie stays. */
-export function resetLibrary(): void {
-  CookieConsent.reset(false)
 }
