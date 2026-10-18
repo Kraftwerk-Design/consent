@@ -3,16 +3,17 @@
 Cookie consent for Kraftwerk projects, built on
 [vanilla-cookieconsent](https://cookieconsent.orestbida.com/). It ships a
 banner + preferences modal, honors [Global Privacy Control](https://globalprivacycontrol.org/)
-out of the box, and gives you helpers and web components to hold third-party
+out of the box, and gives you web components and helpers to hold third-party
 embeds and scripts until the visitor consents.
 
 You configure it by **passing data into `initConsent()`** — the package ships
 sensible defaults and your project supplies only its overrides.
 
 - **Banner + preferences modal** — categories, copy, and layout are config-driven.
-- **GPC honored automatically** — a visitor sending a GPC signal is opted out on load.
+- **GPC honored automatically** — clamped categories stay off and the banner says why.
 - **Gate anything** — YouTube/Vimeo, maps, social embeds, chat widgets, or any tagged `<script>`.
 - **Optional ad-tech signaling** — [Google Consent Mode v2](docs/google-consent-mode.md) and [Meta Pixel](docs/meta-pixel.md).
+- **Optional age gate** — nothing tracks until the visitor passes it.
 
 ---
 
@@ -24,13 +25,11 @@ npm install @kraftwerkdesign/consent vanilla-cookieconsent
 
 `vanilla-cookieconsent` is a **peer dependency** — you control its version and
 own its stylesheet. The package ships no CSS side-effect; import the banner
-styles yourself (see step 3 below).
+styles yourself (see step 2 below).
 
 ---
 
 ## Quick start
-
-Three steps get you a working banner that blocks analytics until opt-in.
 
 **1. Write your config** (`src/consent.config.ts`). Override only what differs
 from the defaults:
@@ -44,18 +43,21 @@ export const consentConfig: Partial<ConsentConfig> = {
 }
 ```
 
-**2. Initialize in your app entry:**
+**2. Initialize once in your app entry:**
 
 ```ts
 import { initConsent } from '@kraftwerkdesign/consent'
 import 'vanilla-cookieconsent/dist/cookieconsent.css'
 import { consentConfig } from './consent.config'
 
-initConsent(consentConfig)
+export const consent = initConsent(consentConfig)
 ```
 
-`initConsent()` merges your config, exposes the imperative API on `window`,
-registers the `<consent-embed>` / `<consent-pour>` elements, and runs the banner.
+`initConsent()` resolves and freezes your config, exposes `window.KDConsent`,
+registers `<consent-embed>` / `<consent-pour>`, runs the banner and returns a
+[handle](#the-handle). Its `ready` promise resolves once the banner has run.
+With `ageGate`, `ready` waits for `confirmAge()`, so don't top-level-await it in
+the module that wires the gate.
 
 **3. Tag third-party scripts** so vanilla-cookieconsent blocks them until opt-in:
 
@@ -63,8 +65,8 @@ registers the `<consent-embed>` / `<consent-pour>` elements, and runs the banner
 <script type="text/plain" data-category="analytics" src="https://…"></script>
 ```
 
-That's it. The default config defines two categories — `necessary` (always on)
-and `analytics` (consent-gated) — in **opt-in** mode. See
+The default config defines two categories — `necessary` (always on) and
+`analytics` (consent-gated) — in **opt-in** mode. See
 [Configuration](#configuration) to change any of it.
 
 > Using **Craft CMS / SEOmatic**? Tag its script tags in Twig:
@@ -81,16 +83,14 @@ and `analytics` (consent-gated) — in **opt-in** mode. See
 
 ## Recipes
 
-Each embed or widget is gated a different way depending on what it is. Pick the
-row that matches; a self-contained example follows.
-
 | What you're gating | Use |
 |---|---|
-| YouTube / Vimeo video | `<lite-youtube>` / `<lite-vimeo>` + gate hooks |
-| Map, social embed, any iframe/SDK | [`<consent-embed>`](#gate-a-map-or-social-embed) element |
-| PourNow wine finder | [`<consent-pour>`](#gate-the-pournow-wine-finder) element |
-| A bespoke JS widget (chat, custom SDK) | [`setupConsentGate()`](#gate-a-bespoke-widget) |
-| A link or button | [`data-require-consent`](#gate-a-link-or-button) attribute |
+| YouTube / Vimeo video | [`<lite-youtube>` / `<lite-vimeo>` + gate hooks](#gate-a-youtube-or-vimeo-video) |
+| Map, social embed, any iframe/SDK | [`<consent-embed>`](#gate-a-map-or-social-embed) |
+| PourNow wine finder | [`<consent-pour>`](#gate-the-pournow-wine-finder) |
+| Your own gated element | [`defineGatedElement()`](#your-own-gated-element) |
+| A bespoke JS widget (chat, custom SDK) | [`attachGate()`](#gate-a-bespoke-widget) |
+| A link or button | [`data-require-consent`](#gate-a-link-or-button) |
 
 > Self-hosted `<video>`/MP4 is **not** in scope — it sets no tracking cookies
 > and needs no consent. Gate only third-party embeds that phone home.
@@ -99,23 +99,16 @@ row that matches; a self-contained example follows.
 
 `<lite-youtube>` and `<lite-vimeo>` come from
 [`@kraftwerkdesign/kd-components`](https://github.com/Kraftwerk-Design/kd-components).
-The components stay standalone; you wire them to this package's gate helpers
-**once** in your app entry via two static hooks:
+Wire their two static hooks to the handle **once** in your app entry:
 
 ```ts
 import { LiteYTEmbed, LiteVimeoEmbed } from '@kraftwerkdesign/kd-components'
-import { hasConsent, requireConsent } from '@kraftwerkdesign/consent'
 
 for (const El of [LiteYTEmbed, LiteVimeoEmbed]) {
-  El.consentGate = () => requireConsent()  // click: may open the consent UI
-  El.consentReady = () => hasConsent()      // passive (autoload/scroll): just reports state
+  El.consentGate = () => consent.require()  // click: may open the consent UI
+  El.consentReady = () => consent.has()     // passive (autoload/scroll): just reports state
 }
 ```
-
-Register the components (see [kd-components docs](https://github.com/Kraftwerk-Design/kd-components)),
-then drop the markup. The component builds its own thumbnail + iframe from
-`videoid`; add `background` for a muted, looping video that autoplays (after
-consent) on scroll into view:
 
 ```html
 <!-- click-to-play -->
@@ -125,25 +118,24 @@ consent) on scroll into view:
 <lite-youtube videoid="ID" nocookie background></lite-youtube>
 ```
 
-When a click is blocked, the component shows a dismissible "blocked until you
-accept cookies" notice (customizable — see kd-components). To gate video behind
-a category other than the default, pass its id to the hooks —
-`() => requireConsent('functionality')` — see
-[Gate behind a different category](#gate-behind-a-different-category).
+To gate video behind another category, pass its id to both hooks:
+
+```ts
+El.consentGate = () => consent.require('functionality')
+El.consentReady = () => consent.has('functionality')
+```
 
 ### Gate a map or social embed
 
-`<consent-embed>` is for any third-party embed without a dedicated facade
-(Google Maps, Twitter/X, Instagram, Facebook, …). Put the real embed in a
-`<template>` so nothing fetches or executes until consent. On activation it's
-stamped into the element's **light DOM** (so SDKs can hydrate it), and any
-`<script>` in the template is re-created so it runs.
-
-- A `[data-poster]` child is the placeholder / click-to-load affordance.
-- Add `autoactivate` to load automatically when consent is already present.
+`<consent-embed>` holds any third-party embed without a dedicated facade
+(Google Maps, Twitter/X, Instagram, …). Put the real embed in a `<template>` so
+nothing fetches or executes until consent. On activation it's stamped into the
+element's **light DOM** (so SDKs can hydrate it) inside a
+`[data-consent-embed-content]` wrapper, and any `<script>` in the template is
+re-created so it runs.
 
 ```html
-<!-- Google Map (pure iframe) — auto-loads once consent exists -->
+<!-- Google Map — auto-loads once consent exists -->
 <consent-embed autoactivate>
   <button data-poster>Show map</button>
   <template>
@@ -152,7 +144,7 @@ stamped into the element's **light DOM** (so SDKs can hydrate it), and any
 </consent-embed>
 
 <!-- Social embed (SDK-driven) — click to load -->
-<consent-embed>
+<consent-embed category="marketing">
   <button data-poster>Show post</button>
   <template>
     <blockquote class="twitter-tweet"><a href="https://twitter.com/…/status/…"></a></blockquote>
@@ -163,11 +155,10 @@ stamped into the element's **light DOM** (so SDKs can hydrate it), and any
 
 ### Gate the PourNow wine finder
 
-The PourNow wine-finder ships an iframe plus a companion script that hooks
-`DOMContentLoaded` — a lifecycle that can't be gated normally. `<consent-pour>`
-**internalizes** that script: it owns the iframe, builds it on consent from the
-`shelf` UUID, runs the height/`productId` logic scoped to itself, and tears
-everything down (iframe + its `message` listener) on withdrawal.
+PourNow ships an iframe plus a script that hooks `DOMContentLoaded`, which
+can't be gated. `<consent-pour>` replaces that script: it builds the iframe on
+consent from the `shelf` UUID, runs the height/`productId` logic scoped to
+itself, and removes the iframe and its `message` listener on withdrawal.
 
 ```html
 <consent-pour shelf="11111111-…" category="functionality" autoactivate>
@@ -176,53 +167,91 @@ everything down (iframe + its `message` listener) on withdrawal.
 ```
 
 - `shelf` (**required**) becomes `https://find.pour.now/{shelf}`.
-- `category` defaults to the gate category; `height` sets the initial px height
-  (default `1130`) until the iframe's own messages take over.
-- `autoactivate` loads as soon as consent is present; otherwise a
-  `[data-poster]` click activates.
+- `height` sets the initial px height (default `1130`) until the iframe's own
+  messages take over.
 
-Each element owns its own iframe, so multiple shelves on a page never
-cross-talk. `initConsent()` registers the element for you. (If you wire the
-pieces manually instead of calling `initConsent()`, call `defineConsentPour()`
-yourself — otherwise `<consent-pour>` stays an inert unknown element.)
+### Gated element behaviour
+
+`<consent-embed>`, `<consent-pour>` and elements from `defineGatedElement()`
+share one behaviour:
+
+- `category` (default: the [gate category](#categories)) and `autoactivate`
+  are read on connect.
+- `autoactivate` mounts as soon as the category is granted. Otherwise a
+  `[data-poster]` click mounts; before consent the click opens the consent UI
+  and mounts on the grant, without a second click.
+- Withdrawing the category unmounts the content.
+- The host carries `state="blocked"` or `state="active"`; the poster gets
+  `hidden` while active. The library writes no inline styles on the host or
+  poster. Author CSS that sets `display` on the poster overrides `hidden`; add
+  `[data-poster][hidden] { display: none }`.
+- Mounted children carry `data-consent-gated`. Moving the element within one
+  task keeps the mount; a later move re-creates it, keeping a click's
+  activation. A clone (e.g. a router's page snapshot) drops the content it
+  copied; a request it started may already be in flight.
+- Elements connected before `initConsent()` bind when it runs.
+  [`destroy()`](#the-handle) unmounts them and clears a click's activation;
+  they bind to the next controller.
+
+`initConsent()` registers both built-in elements. Calling
+`defineConsentEmbed()` / `defineConsentPour()` yourself only lets the tags
+exist before `initConsent()`; they bind once it runs.
+
+### Your own gated element
+
+```ts
+import { defineGatedElement } from '@kraftwerkdesign/consent'
+
+defineGatedElement('consent-calendly', (host) => {
+  const url = host.getAttribute('url')
+  if (!url) return null // can't mount; retried on the next click or grant
+  const frame = document.createElement('iframe')
+  frame.src = url
+  host.append(frame) // append children; don't replace the host's content
+  return () => {}    // release listeners/timers; appended children are removed for you
+})
+```
+
+`Mount` is `(host) => (() => void) | null`. The element follows
+[Gated element behaviour](#gated-element-behaviour).
 
 ### Gate a bespoke widget
 
-For a JS widget that isn't `<template>`-able (chat, a custom SDK), use the
-`setupConsentGate()` primitive directly:
+For a widget that isn't an element (chat, a custom SDK), call `attachGate()`
+after `initConsent()`:
 
 ```ts
-import { setupConsentGate } from '@kraftwerkdesign/consent'
+import { attachGate } from '@kraftwerkdesign/consent'
 
-const teardown = setupConsentGate({
-  activate: () => { /* load widget; return false if no consent */ return true },
-  deactivate: () => { /* tear it down */ },
-  triggers: [placeholderEl],   // elements whose click activates
-  autoActivate: false,          // or true to load when consent already exists
-  category: 'analytics',        // optional; defaults to the gate category
+const release = attachGate({
+  category: 'functionality',   // optional; defaults to the gate category
+  triggers: [placeholderEl],   // clicks mount, or open the consent UI and mount on grant
+  autoActivate: false,         // true: mount as soon as the category is granted
+  mount: () => {
+    const widget = loadWidget()
+    return () => widget.destroy() // teardown, or return null to retry later
+  },
 })
-// teardown() unsubscribes its consent-change + trigger listeners.
+// release() unsubscribes, removes the trigger listeners and unmounts.
 ```
+
+Withdrawal unmounts. `destroy()` unmounts it for good; attach again after re-init.
 
 ### Gate a link or button
 
-Add `data-require-consent` to any link or button — the click opens the consent
-UI if consent is missing, then proceeds:
+Add `data-require-consent` to any link or button — the click is blocked and
+opens the consent UI while the category is missing, and passes through once
+granted:
 
 ```html
 <a href="https://maps.google.com/…" data-require-consent="analytics">Open in Google Maps</a>
 ```
 
-Omit the value (`data-require-consent`) to use the default gate category. The
-legacy `data-require-analytics` attribute still works and means the default
-category.
-
-Or gate imperatively inside a component:
+Omit the value (`data-require-consent`) to use the gate category. In code, use
+`consent.require()` (or `window.KDConsent.require()`):
 
 ```ts
-import { requireConsent } from '@kraftwerkdesign/consent'
-
-if (!requireConsent()) return // opens the consent UI, returns false
+if (!consent.require('analytics')) return // opened the consent UI
 // …consent granted, proceed
 ```
 
@@ -232,40 +261,28 @@ if (!requireConsent()) return // opens the consent UI, returns false
 
 `categories` is config-driven. Passing a `categories` array **replaces** the
 default set. Each entry registers with vanilla-cookieconsent and renders a
-preferences-modal section from its `copy`. Mark **exactly one** category
-`analytics: true` — that's the bucket the gate helpers check and the one GPC
-clamps by default.
+preferences-modal section from its `copy`. `has()`, `require()`, gated elements
+and `data-require-consent` default to `gateCategory` (falls back to
+`'analytics'`), which is also the category GPC clamps by default.
 
 ```ts
 categories: [
   { id: 'necessary', enabled: true, readOnly: true,
     copy: { title: 'Strictly necessary', description: '…' } },
-  { id: 'analytics', analytics: true,
+  { id: 'functionality',
+    copy: { title: 'Functionality', description: '…' } },
+  { id: 'analytics', gpc: true,
     autoClear: [{ name: /^_ga/ }, { name: '_gid' }],
     copy: { title: 'Analytics', description: '…' } },
-  { id: 'marketing', autoClear: [{ name: /^_fbp/ }],
+  { id: 'marketing', gpc: true, autoClear: [{ name: /^_fbp/ }],
     copy: { title: 'Marketing', description: '…' } },
 ]
 ```
 
-See [`ConsentCategory`](#category-fields) for every field.
-
-### Gate behind a different category
-
-By default every gate keys off the default gate category (`gateCategory`, which
-falls back to the `analytics` one). To gate specific content behind another
-category — e.g. a `functionality` category that stays usable under GPC:
-
-- **Embeds:** `<consent-embed category="functionality">…</consent-embed>`
-- **Links/buttons:** `<a data-require-consent="functionality">`
-- **Programmatic:** `setupConsentGate({ category: 'functionality', … })`
-- **Imperative:** `hasConsent('functionality')`, `requireConsent('functionality')`,
-  `onConsentChange(handler, 'functionality')`
-
-Each category also accepts `gpc: boolean`. When **any** category sets `gpc`, GPC
-clamps exactly the `gpc: true` categories; otherwise it clamps the default gate
-category. This lets a `functionality` category stay usable under a GPC signal
-while `analytics` stays blocked.
+When **any** category sets `gpc`, GPC clamps exactly the `gpc: true`
+categories; otherwise it clamps the gate category. This keeps a
+`functionality` category usable under GPC while `analytics` stays blocked.
+See [Category fields](#category-fields).
 
 ---
 
@@ -274,25 +291,30 @@ while `analytics` stays blocked.
 `mode` sets the consent direction:
 
 - **`'opt-in'`** (default, GDPR) — nothing tracks until the visitor accepts.
-  Tag scripts `type="text/plain"`; the page reloads on consent to activate them.
+  Tag scripts `type="text/plain"`; accepting releases them in the page, without
+  a reload. `necessary` `text/plain` scripts also wait for a first choice.
 - **`'opt-out'`** (CCPA) — consent-by-default with a right to opt out. Set
-  consent-gated categories `enabled: true`; you'll commonly also set
-  `reloadOnConsentChange: false`.
+  consent-gated categories `enabled: true`. A fresh visitor's defaults are
+  effective at once (`has('analytics')` is true, their scripts run,
+  auto-activated embeds mount). Opting out reloads the page by default; see [Reload](#reload).
 
-**GPC is honored in both modes** — a visitor sending a Global Privacy Control
-signal is opted out of the clamped category on load, no reload, with an
-informational banner confirming the signal was honored. GPC is detected
-client-side via `navigator.globalPrivacyControl` (cache-safe, no server header).
+### GPC
+
+GPC is detected client-side via `navigator.globalPrivacyControl` (cache-safe,
+no server header) and honored in both modes, without a reload.
+
+By default GPC is a **hard lock**. Clamped categories are not registered with
+the banner, so no button, `data-cc` attribute or `acceptCategory()` call can
+release their scripts or make them effective, their preferences section has no
+toggle, and their autoClear cookies are erased on every load. A fresh GPC
+visitor sees the normal banner with a GPC notice, asking about the other
+categories; nothing is recorded until they choose.
 
 <a id="gpc-details"></a>
-By default GPC is a **hard lock** — the analytics toggle is disabled (off)
-and re-clamped to necessary-only on every load, so a visitor can never turn
-tracking back on. Set `allowGpcOverride: true` to treat GPC as an overridable
-*default* instead: analytics still starts off and the banner explains the
-signal was honored, but the preferences toggle stays operable, the banner
-offers an explicit **Accept all** / **Keep off** choice, and a saved opt-in
-sticks across loads (reloading to activate blocked scripts, like any non-GPC
-change).
+Set `allowGpcOverride: true` to treat GPC as an overridable *default* instead:
+clamped categories start off, the banner offers **Accept all** / **Keep off**
+(Keep off saves the defaults minus the clamped categories), and a saved opt-in
+sticks across loads.
 
 GPC is a legally binding opt-out where laws like CCPA/CPRA apply; only enable
 override where a genuine, user-initiated override is appropriate, and treat it
@@ -300,119 +322,224 @@ as a compliance decision. The GPC spec explicitly contemplates it — *"a specif
 arrangement with that person may permit a website to ignore a generally
 applicable preference"* ([W3C GPC draft](https://w3c.github.io/gpc/)).
 
+`buildCopy` receives `{ gpc, mode }` (`gpc` is `'none'`,
+`'locked'` or `'default-off'`) to write copy for each case; custom copy cannot
+unlock a clamped category.
+
+---
+
+## Reload
+
+Accepting releases `type="text/plain"` scripts in the page at once. `reload`
+sets when a visitor's choice also reloads the page:
+
+| `reload` | Reloads when |
+|---|---|
+| `'on-withdraw'` (default) | a category goes from granted to denied, so scripts that already ran stop |
+| `'on-change'` | any category changes |
+| `'never'` | never (SPAs, pages that react to `consent:change` themselves) |
+
+It never reloads on load, on `confirmAge()`, or when a choice changes no
+category (e.g. an opt-out visitor accepting the defaults). GPC visitors follow
+the policy for the categories they can still choose.
+
+With `'on-change'`, scripts released by an accept run twice: live, then again
+after the reload. A first Accept all runs an inline analytics tag 2 times on one
+visit, so it counts two pageviews.
+
+Without a reload, a withdrawal erases autoClear cookies, unmounts gated
+embeds and sends denied signals, but scripts that already ran keep running
+until the next page view.
+
+SDKs that boot on `load` or `DOMContentLoaded` (e.g. Commerce7's
+`window.onload = loadScript`) miss those events when a live accept releases
+them. Use `reload: 'on-change'` so they start after the reload, or load them
+ungated. `'on-change'` only helps when the choice turns the SDK's own
+non-necessary category on; SDKs tagged `necessary` or held by the age gate
+must load ungated.
+
 ---
 
 ## Age gate
 
-For age-restricted sites (alcohol), set `ageGate` to hold the **entire** consent
-stack until the visitor passes a gate you render:
+For age-restricted sites (alcohol), set `ageGate` to hold the consent stack
+until the visitor passes a gate you render:
 
 ```ts
 ageGate: { cookieName: 'acme_age_verified', maxAgeDays: 30 }
 ```
 
-Until `confirmAge()` is called (or the cookie exists), nothing runs: no banner,
-no `text/plain` script release, no Consent Mode/Meta updates, `hasConsent()` is
-false for every category, and `requireConsent()`/`promptConsent()` do nothing.
-`initConsent()`'s promise resolves only after the gate passes and the banner
-initializes. After that the banner behaves normally — passing the gate never
-grants consent or overrides GPC.
+Both fields are optional: `cookieName` defaults to `AGE_GATE_COOKIE`
+(`'kd_age_verified'`), `maxAgeDays` to 30.
+
+**Nothing tracks before `confirmAge()`** (or a valid age cookie): no banner, no
+script release (`necessary` included), no integration updates, no
+`consent:change` event. `has()` is false for every category, `require()`
+returns false and `prompt()` does nothing; `getSnapshot().stage` is
+`'awaiting-age'`. Only the integrations' deny-first defaults run before the
+gate: the Consent Mode `default` pushed into `dataLayer`, and Meta's `revoke`
+if `fbq` already exists. `ready` resolves after the gate passes and the banner
+runs. Passing never grants consent or overrides GPC, and never reloads.
+
+After the pass the banner behaves normally. In opt-in, `necessary`
+`text/plain` scripts still wait for the visitor's first banner choice
+(returning visitors release them on load); in opt-out they run at once.
+
+**Ungated vendor tags are unsupported with the age gate.** Tag Google and Meta
+scripts `type="text/plain" data-category="…"` (Model A). With `ageGate` set,
+`initConsent()` warns about any `googletagmanager.com` or
+`connect.facebook.net` script that isn't, and about a `window.fbq` that already
+exists. Keep other untagged scripts (`<noscript>` pixels, unblocked SDKs) out
+of the page — the gate only holds what the consent stack controls.
 
 The library owns the state, not the UI. Your gate decides eligibility (yes/no,
 date of birth) and calls `confirmAge()` on a pass; it never receives the answer.
 
-```ts
-import { confirmAge, isAgeVerified } from '@kraftwerkdesign/consent'
+Render the gate in the page HTML, visible by default, and hide it with CSS once
+`<html>` has the `age-verified` class. For returning visitors the class is set
+before paint, so a statically cached page never flashes content: inline
+`ageGateHeadScript({ cookieName: 'acme_age_verified' })` in `<head>` (options
+`cookieName`, default `AGE_GATE_COOKIE`, and `className`, default
+`'age-verified'`). It renders:
 
-if (!isAgeVerified()) showGate()
-yesButton.onclick = () => { confirmAge(); hideGate() }
-```
-
-Render the gate in the page HTML (visible by default) and hide it before paint
-for returning visitors, so a statically cached page never flashes content:
-
+<!-- age-gate-head -->
 ```html
 <script>
-  if (document.cookie.split(/;\s*/).includes('acme_age_verified=1'))
-    document.documentElement.classList.add('age-verified')
+  if (document.cookie.split(/;\s*/).includes("acme_age_verified=1"))
+    document.documentElement.classList.add("age-verified")
 </script>
 ```
+<!-- /age-gate-head -->
 
-Tag scripts that must wait for the gate but aren't consent-gated as
-`type="text/plain" data-category="necessary"`. Keep untagged scripts
-(`<noscript>` pixels, unblocked SDKs) out of the page — the gate can only hold
-what the consent stack controls.
+```css
+.age-verified #age-gate { display: none; }
+```
 
-Scripts released by a mid-visit pass run after `load`/`DOMContentLoaded` have
-fired, so SDKs that boot on those events (e.g. Commerce7's
-`window.onload = loadScript`) won't start until the next page view. Load those
-ungated.
+On a pass, confirm and set the same class:
 
-The static [`<head>` Consent Mode default](docs/google-consent-mode.md#synchronous-head-default)
-is not held: it runs before the gate with every consent-gated signal `denied`
-(necessary signals `granted`). An unblocked Google tag (Model B) therefore loads
-before the pass and sends cookieless pings. Tag it `type="text/plain"` (Model A)
-to hold Google entirely.
+```ts
+import { confirmAge } from '@kraftwerkdesign/consent'
+
+yesButton.onclick = () => {
+  confirmAge()
+  document.documentElement.classList.add('age-verified')
+}
+```
+
+`confirmAge()` writes the cookie, then releases the stack. Before
+`initConsent()` (or with no `ageGate`) it writes
+`opts.cookieName ?? AGE_GATE_COOKIE`; a later `initConsent()` with the same
+`ageGate.cookieName` then runs at once. `isAgeVerified(opts?)` resolves the
+name the same way: before `initConsent()` pass it
+(`isAgeVerified({ cookieName: 'acme_age_verified' })`); after it, it uses the
+configured name and is true when no `ageGate` is configured. `confirmAge` is
+also on `window.KDConsent`.
 
 ---
 
 ## Ad-tech consent signaling
 
-Both are **off by default** and feed consent state into third-party tags
-*without* blocking or unblocking the tags themselves.
+Add integrations to `integrations` (none by default). They feed consent state
+into third-party tags *without* blocking or unblocking the tags themselves.
 
-- **[Google Consent Mode v2](docs/google-consent-mode.md)** — set
-  `googleConsentMode: true` and map each category's `google` signals. Pushes a
-  consent `default` at init and an `update` on change. Includes a static,
-  config-free `<head>` snippet for sites whose Google tag loads unblocked.
-- **[Meta Pixel](docs/meta-pixel.md)** — set `metaPixelConsentMode: true` and
-  flag categories `meta: true`. Grants/revokes the pixel on consent change, with
-  Limited Data Use (LDU) for US-state opt-outs.
+```ts
+import { initConsent, googleConsentMode, metaPixel } from '@kraftwerkdesign/consent'
+
+initConsent({
+  integrations: [
+    googleConsentMode({
+      security_storage: 'necessary',
+      functionality_storage: 'necessary',
+      analytics_storage: 'analytics',
+      ad_storage: 'analytics',
+      ad_user_data: 'analytics',
+      ad_personalization: 'analytics',
+    }),
+    metaPixel({ category: 'analytics' }), // ldu: true by default (opt-out only)
+  ],
+})
+```
+
+- **[Google Consent Mode v2](docs/google-consent-mode.md)** — maps each signal
+  to the categories that grant it. Pushes a deny-first consent `default` at
+  init and an `update` on each change.
+- **[Meta Pixel](docs/meta-pixel.md)** — sends `revoke` at init, then
+  `grant`/`revoke` on change. `ldu` (default `true`) adds Limited Data Use for
+  denied visitors in opt-out mode; opt-in never sends it.
+- **[Other vendors](docs/integrations.md)** — LinkedIn / Klaviyo recipes and
+  writing your own `ConsentIntegration`.
+
+A signal is granted if any of its categories is granted. Integrations send
+only when what they map changes. A throw in one doesn't stop the others.
+
+---
+
+## Head snippets
+
+Static `<head>` scripts for statically cached pages. Inline them as-is:
+
+- `GOOGLE_CONSENT_DEFAULT_HEAD` — the Consent Mode `default` to place above an
+  *unblocked* Google tag (Model B). Only for the mapping above; see
+  [Synchronous `<head>` default](docs/google-consent-mode.md#synchronous-head-default).
+- `ageGateHeadScript({ cookieName?, className? })` — hides the age gate before
+  paint for verified visitors; see [Age gate](#age-gate).
+
+---
+
+## SPAs
+
+- Call `initConsent()` **once**, at the app root, and share the handle. A
+  repeat call returns the same handle and warns if it gets options. Use
+  `reload: 'never'` and react to `subscribe` instead.
+- The library collects `script[data-category]` once, when the banner runs.
+  Scripts a route inserts later are **never released**. Gate route content with
+  [gated elements](#gated-element-behaviour) or `attachGate()` instead.
+- `subscribe` + `getSnapshot` fit `useSyncExternalStore`: the snapshot keeps
+  its reference until it changes.
+- `destroy()` is for HMR and tests. It removes the banner, the wrapper's
+  listeners, `window.KDConsent`, subscribers and a pending age wait; the
+  consent cookie stays. Gated elements unmount and bind to the next
+  controller when `initConsent()` runs again.
+- vanilla-cookieconsent's own click and focus listeners on
+  `[data-cc="show-preferencesModal"]` elements survive `destroy()`, and re-init
+  adds them again. Under HMR, open preferences with `consent.prompt()` instead.
 
 ---
 
 ## Configuration
 
-Every field of `ConsentConfig` is overridable; anything you omit falls through
-to `config.default.ts`.
+Every field of `ConsentConfig` is overridable; anything you omit takes the
+default in the table below. The config is frozen at init.
 
 | Setting | Description |
 |---|---|
 | `mode` | `'opt-in'` (default) or `'opt-out'`. See [above](#opt-in-vs-opt-out-gdpr-vs-ccpa). |
-| `cookieName` | Consent cookie name. |
-| `privacyPolicyUrl` | Link shown in the preferences modal. |
+| `cookieName` | Consent cookie name (default `'kd_cookie_consent'`). |
+| `privacyPolicyUrl` | Link shown in the preferences modal (default `'/policies/privacy-policy'`). |
 | `categories` | Full category list — **replaces** the default `necessary`/`analytics` set. |
-| `gateCategory` | Category id the gate helpers target when a gate names none. Falls back to the `analytics: true` category, then `'analytics'`. |
-| `ageGate` | `{ cookieName, maxAgeDays? }` — hold everything until `confirmAge()`. See [Age gate](#age-gate). |
-| `consentChangeEvent` | DOM event dispatched on change (default `consent:change`). `detail` is `{ accepted, categories }`. |
-| `allowGpcOverride` | Let visitors opt back into analytics despite a GPC signal (default `false`). See [GPC note](#gpc-details). |
-| `reloadOnConsentChange` | Reload on non-GPC change so blocked scripts activate (default `true`). Set `false` for SPA-style sites relying on live listeners. |
-| `googleConsentMode` | Emit [Google Consent Mode v2](docs/google-consent-mode.md) signals. Off by default. |
-| `metaPixelConsentMode` | Emit [Meta Pixel](docs/meta-pixel.md) consent signals. Off by default. |
-| `gpcBannerAckKey` | sessionStorage key for the GPC banner dismiss (optional override). |
-| `guiOptions` | vanilla-cookieconsent layout/position. |
-| `buildCopy` | Override banner/preferences copy wholesale (optional). |
+| `gateCategory` | Category id `has()`/`require()` and gates target when they name none. Falls back to `'analytics'`. |
+| `ageGate` | `{ cookieName?, maxAgeDays? }` — hold everything until `confirmAge()`. See [Age gate](#age-gate). |
+| `consentChangeEvent` | DOM event dispatched once per distinct change (default `consent:change`). `detail` is the [snapshot](#snapshot). |
+| `allowGpcOverride` | Let visitors opt back into clamped categories despite a GPC signal (default `false`). See [GPC](#gpc-details). |
+| `reload` | `'on-withdraw'` (default), `'on-change'` or `'never'`. See [Reload](#reload). |
+| `integrations` | `googleConsentMode(…)`, `metaPixel(…)` or your own. None by default. See [Ad-tech](#ad-tech-consent-signaling). |
+| `guiOptions` | vanilla-cookieconsent layout/position. Default: `cloud` banner at `bottom center` with flipped buttons, `box` preferences modal, equal-weight buttons in both. |
+| `buildCopy` | `({ gpc, mode }) => language`: override banner/preferences copy wholesale (optional). Under GPC `default-off` the banner's necessary button is **Keep off**. |
 
-`configureConsent()` (called by `initConsent()`) validates the resolved config
-and `console.warn`s — never throws — on common mistakes: duplicate category ids,
-more than one `analytics: true` category, an unresolvable `gateCategory`, or
-`google`/`meta` flags on a category *you* defined while its consent mode is off.
-(The shipped defaults carry `google`/`meta` mappings so the modes work the
-moment you flip them on; those don't warn.)
+`initConsent()` runs `validateConsentConfig(config)` on the resolved config and
+`console.warn`s — never throws — on common mistakes: duplicate category ids, an
+unresolvable `gateCategory`, no category subject to the GPC clamp, an
+integration naming an unknown category, an unknown `reload` policy, the removed
+`reloadOnConsentChange`, or a non-positive `ageGate.maxAgeDays`.
 
 ### Category fields
-
-Fields on each `ConsentCategory` entry:
 
 | Field | Description |
 |---|---|
 | `id` | Category id used by vanilla-cookieconsent. |
 | `enabled` | Start the category granted — set on necessary categories; under opt-out, also on consent-gated categories. |
 | `readOnly` | Locked on. |
-| `analytics` | Marks the tracking bucket the JS gate helpers check. Set on exactly one category. |
-| `gpc` | Subject to the GPC clamp. When no category sets it, the default gate category is clamped. |
-| `meta` | Grants the [Meta Pixel](docs/meta-pixel.md) when consented. |
-| `google` | [Google Consent Mode v2](docs/google-consent-mode.md) signals this category grants. |
+| `gpc` | Subject to the GPC clamp. When no category sets it, the gate category is clamped. |
 | `autoClear` | Cookies cleared on opt-out — `[{ name: string \| RegExp }]`. |
 | `copy` | Preferences-modal section copy — `{ title, description }`. |
 
@@ -420,62 +547,67 @@ Fields on each `ConsentCategory` entry:
 
 ## API reference
 
-### Imperative API
+### The handle
 
-Available as exports and on `window.KDConsent` (type `ConsentApi`):
+`initConsent(options?)` returns a `ConsentHandle`:
 
-```ts
-import { hasConsent, requireConsent, promptConsent, onConsentChange } from '@kraftwerkdesign/consent'
+| Member | Description |
+|---|---|
+| `ready` | Promise; resolves once the banner has run and the first snapshot is applied (after `confirmAge()` with an age gate). Stays pending if destroyed first. |
+| `getSnapshot()` | The current [snapshot](#snapshot). Same reference until it changes. |
+| `subscribe(fn)` | `fn(next, prev)` once per distinct change; returns the unsubscribe. |
+| `has(category?)` | Whether the category (default: the gate category) is effective. No side effect. |
+| `require(category?)` | `has()`, and opens the consent UI when false. |
+| `prompt()` | Opens the banner before a choice, the preferences after. Not category-scoped. |
+| `destroy()` | Tears the controller down; see [SPAs](#spas). |
 
-hasConsent('analytics')          // → boolean, no side effect
-requireConsent('analytics')      // → boolean; opens the consent UI if missing
-promptConsent()                  // opens the consent UI
-onConsentChange((accepted) => {}, 'analytics')  // → unsubscribe fn
-```
+### `window.KDConsent`
 
-`hasConsent`, `requireConsent`, and `onConsentChange` take an optional category
-id, defaulting to the gate category. `promptConsent` opens the modal and takes
-no meaningful argument (it can't deep-link to a section).
+For inline scripts and no-build sites, `window.KDConsent` (type `ConsentApi`)
+is `{ has, require, prompt, confirmAge, getSnapshot }`. It is set by
+`initConsent()` and removed by `destroy()`. Subscribe with the DOM event.
 
-`hasGpcSignal()` is exported too (`→ boolean`), but is a plain export — it is
-**not** on `window.KDConsent`.
+### Snapshot
 
-> The `*Analytics*` variants (`hasAnalyticsConsent`, `requireAnalyticsConsent`,
-> `promptAnalyticsConsent`, `onAnalyticsConsentChange`) still work as aliases
-> scoped to the default gate category, but are **`@deprecated`** — prefer the
-> category-taking functions above.
-
-### Manual wiring
-
-`initConsent(overrides)` is the shortcut for the four steps below. Run them
-yourself if you need to insert logic between (e.g. emit the Google Consent Mode
-`<head>` script after config resolves):
+`getSnapshot()`, `subscribe` and the `consent:change` event detail share one
+frozen `ConsentSnapshot`:
 
 ```ts
-import {
-  configureConsent, installWindowApi,
-  defineConsentEmbed, defineConsentPour, runConsent,
-} from '@kraftwerkdesign/consent'
-
-configureConsent(consentConfig)  // resolve + validate config into the store
-installWindowApi()               // expose window.KDConsent + data-require-consent delegation
-defineConsentEmbed()             // register <consent-embed>
-defineConsentPour()              // register <consent-pour>
-runConsent()                     // run the banner
+interface ConsentSnapshot {
+  readonly stage: 'pending' | 'awaiting-age' | 'ready'
+  readonly recorded: boolean   // a choice is saved in the cookie
+  readonly gpc: 'none' | 'default-off' | 'locked'  // GpcState
+  readonly categories: Readonly<Record<string, boolean>>  // effective, GPC clamp applied
+}
 ```
 
-Importing modules has **no side effects** — `installWindowApi()` is what
-registers the window API and `data-require-consent` delegation.
+```ts
+document.addEventListener('consent:change', (event) => {
+  const { categories } = (event as CustomEvent<ConsentSnapshot>).detail
+  categories.analytics
+})
+```
+
+`categories` is all false before the gate passes; `readOnly` categories are
+true once ready. Unrecorded opt-out visitors get their `enabled` defaults
+minus GPC-clamped categories, unrecorded opt-in visitors `readOnly` only. The event fires once when ready and
+once per distinct change, never while `awaiting-age`.
 
 ### Exports
 
-`initConsent`, `configureConsent`, `getConsentConfig`, `validateConsentConfig`,
-`runConsent`, `installWindowApi`, `defineConsentEmbed`, `defineConsentPour`,
-`setupConsentGate`, `renderGoogleConsentDefaultScript`, `hasGpcSignal`,
-`isAgeVerified`, `confirmAge`, the
-imperative API functions above, and types `ConsentConfig`, `ConsentCategory`,
-`ConsentApi`, `ConsentGate`, `GoogleConsentSignal`, `AutoClearCookie`,
-`CategoryCopy`, `AgeGateConfig`.
+Functions and constants: `initConsent`, `confirmAge`, `isAgeVerified`,
+`AGE_GATE_COOKIE`, `hasGpcSignal`, `validateConsentConfig`,
+`googleConsentMode`, `metaPixel`, `defineGatedElement`, `attachGate`,
+`defineConsentEmbed`, `defineConsentPour`, `GOOGLE_CONSENT_DEFAULT_HEAD`,
+`ageGateHeadScript`.
+
+Types: `ConsentConfig`, `ResolvedConfig`, `ConsentCategory`,
+`ConsentIntegration`, `AutoClearCookie`, `CategoryCopy`, `AgeGateConfig`,
+`CopyContext`, `ConsentHandle`, `ConsentListener`, `ConsentApi`,
+`ConsentSnapshot`, `GpcState`, `ReloadPolicy`, `GateOptions`, `Mount`,
+`GoogleConsentMap`, `GoogleConsentSignal`.
+
+Importing the package has no side effects.
 
 ---
 
@@ -483,28 +615,35 @@ imperative API functions above, and types `ConsentConfig`, `ConsentCategory`,
 
 ```
 src/
-├── index.ts                 Public API + initConsent(overrides)
-├── config.default.ts        Shared defaults + ConsentConfig/ConsentCategory types
-├── config.ts                Runtime store: configureConsent() / getConsentConfig()
+├── index.ts                 Public API + initConsent()
+├── config.default.ts        Defaults + ConsentConfig / ConsentCategory / ConsentIntegration types
+├── config.ts                resolveConfig (frozen) + validateConsentConfig
 ├── deepMerge.ts             Config deep-merge (arrays replace, undefined skipped)
 ├── gpc.ts                   Global Privacy Control detection
-├── ageGate.ts               Age-gate state: isAgeVerified() / confirmAge()
-├── consentCookie.ts         Parses the saved cookie (single source of truth)
-├── analytics.ts             has/require/prompt + event bus + installWindowApi()
-├── googleConsentMode.ts     Google Consent Mode v2 pushes + renderGoogleConsentDefaultScript()
-├── metaPixelConsentMode.ts  Meta Pixel grant/revoke + Limited Data Use (LDU)
-├── run.ts                   CookieConsent.run() + lifecycle
-├── gate.ts                  setupConsentGate() primitive
-├── copy/en.ts               Banner shell copy; sections generated from categories
-└── embeds/
-    ├── index.ts             Re-exports defineConsentEmbed() + defineConsentPour()
-    ├── consentEmbed.ts      <consent-embed> element (template → light DOM on consent)
-    └── consentPour.ts       <consent-pour> element (PourNow wine-finder facade)
+├── ageGate.ts               AGE_GATE_COOKIE, age cookie, warnUngatedTags()
+├── dom.ts                   window.KDConsent + data-require-consent listener
+├── head.ts                  GOOGLE_CONSENT_DEFAULT_HEAD + ageGateHeadScript()
+├── copy/en.ts               Banner copy (GPC- and mode-aware); sections from categories
+├── core/
+│   ├── controller.ts        initConsent / confirmAge / isAgeVerified; the page's one controller
+│   ├── library.ts           Only importer of vanilla-cookieconsent
+│   ├── snapshot.ts          computeSnapshot + equality
+│   └── reload.ts            shouldReload + reloadPage
+├── integrations/
+│   ├── google.ts            googleConsentMode()
+│   └── meta.ts              metaPixel()
+├── elements/
+│   ├── gated.ts             defineGatedElement() + attachGate()
+│   ├── embed.ts             <consent-embed>
+│   └── pour.ts              <consent-pour> (PourNow wine finder)
+├── testing/                 Contract kits for integrations and gated elements
+└── l1/                      Tests against the real library in jsdom
 
 docs/
 ├── google-consent-mode.md   Google Consent Mode v2 — mapping, static <head> snippet
-├── meta-pixel.md            Meta Pixel — grant/revoke, LDU, page-load PageView
-└── releasing.md             Automated version-bump → npm publish flow
+├── meta-pixel.md            Meta Pixel — grant/revoke, LDU, head/init order
+├── integrations.md          LinkedIn / Klaviyo recipes, writing an integration
+└── releasing.md             Version bump → CI → npm publish
 ```
 
 ---
@@ -513,6 +652,6 @@ docs/
 
 Run `npm test` (Vitest) and `npm run typecheck` before pushing.
 `npm run test:e2e` builds `dist/` and runs Playwright against the fixture pages
-in `e2e/site/` (first run: `npx playwright install chromium`). Releasing is
-automated via `npm run release:{patch,minor,major}` — see
-[docs/releasing.md](docs/releasing.md).
+in `e2e/site/` (first run: `npx playwright install chromium`). CI runs all of
+these on pull requests and `main`. Releasing is automated via
+`npm run release:{patch,minor,major}` — see [docs/releasing.md](docs/releasing.md).

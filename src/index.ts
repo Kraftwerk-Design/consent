@@ -1,57 +1,53 @@
-import { installWindowApi } from './analytics'
-import { configureConsent, type ConsentConfig } from './config'
-import { defineConsentEmbed, defineConsentPour } from './embeds/index'
-import { runConsent } from './run'
+import type { ConsentConfig } from './config'
+import { initConsent as createConsent, type ConsentHandle } from './core/controller'
+import { defineConsentEmbed } from './elements/embed'
+import { defineConsentPour } from './elements/pour'
 
-export { getConsentConfig, configureConsent, validateConsentConfig } from './config'
-export type { ConsentConfig } from './config'
+export { validateConsentConfig } from './config'
+export type { ConsentConfig, ResolvedConfig } from './config'
 export type {
   ConsentCategory,
-  GoogleConsentSignal,
+  ConsentIntegration,
   AutoClearCookie,
   CategoryCopy,
   AgeGateConfig,
+  CopyContext,
 } from './config.default'
 
-export { isAgeVerified, confirmAge } from './ageGate'
+export { confirmAge, isAgeVerified } from './core/controller'
+export type { ConsentHandle, ConsentListener } from './core/controller'
+export { AGE_GATE_COOKIE } from './ageGate'
 
 export { hasGpcSignal } from './gpc'
 
-export {
-  hasConsent,
-  requireConsent,
-  promptConsent,
-  onConsentChange,
-  hasAnalyticsConsent,
-  promptAnalyticsConsent,
-  requireAnalyticsConsent,
-  onAnalyticsConsentChange,
-  installWindowApi,
-  /** @deprecated Renamed to installWindowApi. */
-  initConsentApi,
-} from './analytics'
-export type { ConsentApi } from './analytics'
+export type { ConsentApi } from './dom'
+export type { ConsentSnapshot, GpcState } from './core/snapshot'
+export type { ReloadPolicy } from './core/reload'
 
-export { setupConsentGate } from './gate'
-export type { ConsentGate } from './gate'
+export { attachGate, defineGatedElement } from './elements/gated'
+export type { GateOptions, Mount } from './elements/gated'
 
-export { runConsent } from './run'
+export { googleConsentMode } from './integrations/google'
+export type { GoogleConsentMap, GoogleConsentSignal } from './integrations/google'
+export { metaPixel } from './integrations/meta'
 
-export { renderGoogleConsentDefaultScript } from './googleConsentMode'
+export { GOOGLE_CONSENT_DEFAULT_HEAD, ageGateHeadScript } from './head'
 
-export { defineConsentEmbed, defineConsentPour } from './embeds/index'
+export { defineConsentEmbed } from './elements/embed'
+export { defineConsentPour } from './elements/pour'
 
 /**
- * Initialize the full consent stack: merge per-project config, expose the
- * imperative API on `window`, register the `<consent-embed>` and
- * `<consent-pour>` elements, and run the banner.
+ * Initialize the full consent stack: resolve and freeze the config, expose
+ * `window.KDConsent`, run the integrations' deny-first `init`,
+ * register the `<consent-embed>` and `<consent-pour>` elements, and run the
+ * banner (after `confirmAge()` when `ageGate` is set).
+ *
+ * Call once per page; a repeat call returns the same handle and ignores its
+ * options. Await `.ready` for the banner to have run.
  */
-export function initConsent(
-  overrides: Partial<ConsentConfig> = {},
-): Promise<void> {
-  configureConsent(overrides)
-  installWindowApi()
+export function initConsent(options?: Partial<ConsentConfig>): ConsentHandle {
+  const handle = createConsent(options)
   defineConsentEmbed()
   defineConsentPour()
-  return runConsent()
+  return handle
 }

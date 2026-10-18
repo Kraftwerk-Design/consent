@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Meta head order</title>
+    <link rel="stylesheet" href="/node_modules/vanilla-cookieconsent/dist/cookieconsent.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "vanilla-cookieconsent": "/node_modules/vanilla-cookieconsent/dist/cookieconsent.esm.js",
+          "@kraftwerkdesign/consent": "/dist/index.js"
+        }
+      }
+    </script>
+<!-- meta-head -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('consent', 'revoke');
+fbq('init', 'YOUR_PIXEL_ID');
+fbq('track', 'PageView');
+</script>
+<!-- /meta-head -->
+    <script type="module">
+      import { initConsent, metaPixel } from '@kraftwerkdesign/consent'
+      window.consentReady = initConsent({
+        mode: 'opt-out',
+        cookieName: 'e2e_consent',
+        categories: [
+          { id: 'necessary', enabled: true, readOnly: true },
+          { id: 'analytics', enabled: true },
+        ],
+        integrations: [metaPixel({ category: 'analytics' })],
+      }).ready
+    </script>
+  </head>
+  <body>
+    <h1>Meta head order</h1>
+  </body>
+</html>

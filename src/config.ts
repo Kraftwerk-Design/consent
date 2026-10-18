@@ -1,16 +1,62 @@
 import { deepMerge } from './deepMerge'
-import { defaultConsentConfig, type ConsentConfig } from './config.default'
-import { hasGpcSignal } from './gpc'
+import { AGE_GATE_COOKIE } from './ageGate'
+import {
+  defaultConsentConfig,
+  type AgeGateConfig,
+  type ConsentConfig,
+} from './config.default'
+import { RELOAD_POLICIES } from './core/reload'
 
 export type { ConsentConfig } from './config.default'
 
-let resolved: ConsentConfig = defaultConsentConfig
+/**
+ * Config after merging `initConsent()` options over the defaults. A deeply
+ * frozen copy; `ageGate.cookieName` is filled in. Integrations are kept by
+ * reference.
+ */
+export type ResolvedConfig = Readonly<
+  Omit<ConsentConfig, 'ageGate'> & {
+    ageGate?: Readonly<AgeGateConfig & { cookieName: string }>
+  }
+>
+
+/** Copy plain objects and arrays, then freeze the copies. Other values are kept. */
+function frozenCopy<T>(value: T): T {
+  if (Array.isArray(value)) return Object.freeze(value.map(frozenCopy)) as T
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    const copy = Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, frozenCopy(entry)]),
+    )
+    return Object.freeze(copy) as T
+  }
+  return value
+}
 
 /**
- * Merge per-project overrides onto the defaults and store the result. Called
- * once by `initConsent()` before anything reads config. Arrays (categories,
- * autoClear cookies) replace rather than concatenate, so a project can define
- * its own category set cleanly; nested objects (guiOptions) deep-merge.
+ * Merge per-project overrides onto the defaults. Arrays (categories, autoClear
+ * cookies) replace rather than concatenate, so a project can define its own
+ * category set cleanly; nested objects (guiOptions) deep-merge.
+ */
+export function resolveConfig(overrides: Partial<ConsentConfig> = {}): ResolvedConfig {
+  const config = deepMerge(defaultConsentConfig, overrides)
+  if (config.ageGate) {
+    config.ageGate = { ...config.ageGate, cookieName: config.ageGate.cookieName ?? AGE_GATE_COOKIE }
+  }
+  const { integrations, ...data } = config
+  return Object.freeze({
+    ...frozenCopy(data),
+    integrations: Object.freeze([...integrations]),
+  }) as ResolvedConfig
+}
+
+let resolved: ResolvedConfig = resolveConfig()
+
+/**
+ * Resolve and store the active config. Called once by the controller at init.
  *
  * Runs the resolved config through {@link validateConsentConfig} and
  * `console.warn`s any issues — never throws, so a misconfigured project keeps
@@ -18,26 +64,24 @@ let resolved: ConsentConfig = defaultConsentConfig
  */
 export function configureConsent(
   overrides: Partial<ConsentConfig> = {},
-): ConsentConfig {
-  resolved = deepMerge(defaultConsentConfig, overrides)
+): ResolvedConfig {
+  resolved = resolveConfig(overrides)
 
-  // The shipped defaults deliberately carry `google`/`meta` mappings so that
-  // flipping `googleConsentMode`/`metaPixelConsentMode` on "just works" with no
-  // category rework. Those mappings are therefore only a footgun when the
-  // *project* authored them — so skip the signal-mapping checks unless this
-  // project overrode `categories`.
-  for (const warning of validateConsentConfig(resolved, {
-    checkSignalMappings: overrides.categories !== undefined,
-  })) {
+  for (const warning of validateConsentConfig(resolved)) {
     console.warn('[consent] ' + warning)
   }
 
   return resolved
 }
 
-/** The resolved consent config (defaults until `configureConsent` runs). */
-export function getConsentConfig(): Readonly<ConsentConfig> {
+/** The active consent config (defaults until `configureConsent` runs). */
+export function getConsentConfig(): ResolvedConfig {
   return resolved
+}
+
+/** Back to the defaults, when the controller is destroyed. */
+export function resetConsentConfig(): void {
+  resolved = resolveConfig()
 }
 
 /**
@@ -45,16 +89,8 @@ export function getConsentConfig(): Readonly<ConsentConfig> {
  * silently at runtime (a gate that always returns false, signals nobody ever
  * sends). Returns human-readable warning strings; empty when the config is
  * clean. Never throws.
- *
- * `checkSignalMappings` (default `true`) gates the "google/meta flag set while
- * its consent mode is off" checks. `configureConsent()` turns it off when the
- * project didn't override `categories`, so the shipped defaults' latent
- * `google`/`meta` mappings don't warn against themselves.
  */
-export function validateConsentConfig(
-  config: ConsentConfig,
-  { checkSignalMappings = true }: { checkSignalMappings?: boolean } = {},
-): string[] {
+export function validateConsentConfig(config: ConsentConfig): string[] {
   const warnings: string[] = []
 
   // Duplicate category ids — later entries silently shadow earlier ones.
@@ -70,54 +106,43 @@ export function validateConsentConfig(
     )
   }
 
-  // More than one category flagged analytics: true — only one can be "the"
-  // gate helpers' default target.
-  const analyticsCategories = config.categories.filter(
-    (category) => category.analytics,
-  )
-  if (analyticsCategories.length > 1) {
+  // The default gate category must match a configured category, or
+  // has()/require() permanently return false for it.
+  const resolvedGateCategoryId = defaultGateCategoryId(config)
+  if (!seenIds.has(resolvedGateCategoryId)) {
     warnings.push(
-      `multiple categories are flagged analytics: true (${analyticsCategories
-        .map((category) => category.id)
-        .join(', ')}) — only one should be; the gate helpers' default target is ambiguous.`,
+      `the resolved default gate category '${resolvedGateCategoryId}' does not match any configured category id — has()/require() will permanently return false for it.`,
     )
   }
 
-  // The resolved default gate category id (explicit gateCategory, else the
-  // analytics-flagged category, else the literal 'analytics' id) must match a
-  // configured category, or hasConsent()/requireConsent() permanently return
-  // false for it.
-  const resolvedGateCategoryId =
-    config.gateCategory ?? analyticsCategories[0]?.id ?? 'analytics'
-  const gateCategoryExists = config.categories.some(
-    (category) => category.id === resolvedGateCategoryId,
+  const clampable = new Set(
+    config.categories.filter((category) => !category.readOnly).map((category) => category.id),
   )
-  if (!gateCategoryExists) {
+  if (!gpcClampedCategoryIds(config).some((id) => clampable.has(id))) {
     warnings.push(
-      `the resolved default gate category '${resolvedGateCategoryId}' does not match any configured category id — hasConsent()/requireConsent() will permanently return false for it.`,
+      'no configured category is subject to the GPC clamp — a Global Privacy Control signal turns nothing off. Set gpc: true on the tracking categories.',
     )
   }
 
-  // Google Consent Mode signals configured but the signaling itself is off.
-  if (checkSignalMappings && !config.googleConsentMode) {
-    for (const category of config.categories) {
-      if (category.google && category.google.length > 0) {
-        warnings.push(
-          `category '${category.id}' declares google signals but googleConsentMode is false — they will never be pushed.`,
-        )
-      }
+  for (const integration of config.integrations) {
+    for (const id of integration.categories) {
+      if (seenIds.has(id)) continue
+      warnings.push(
+        `integration '${integration.name}' names unknown category '${id}' — it is never granted.`,
+      )
     }
   }
 
-  // Meta Pixel grant configured but the signaling itself is off.
-  if (checkSignalMappings && !config.metaPixelConsentMode) {
-    for (const category of config.categories) {
-      if (category.meta) {
-        warnings.push(
-          `category '${category.id}' sets meta: true but metaPixelConsentMode is false — the Meta Pixel consent signal will never be sent.`,
-        )
-      }
-    }
+  if ('reloadOnConsentChange' in config) {
+    warnings.push(
+      "reloadOnConsentChange was removed and is ignored — use reload: 'never', 'on-withdraw' (default) or 'on-change'.",
+    )
+  }
+
+  if (!RELOAD_POLICIES.includes(config.reload)) {
+    warnings.push(
+      `reload must be one of ${RELOAD_POLICIES.map((policy) => `'${policy}'`).join(', ')} (got ${JSON.stringify(config.reload)}) — the page never reloads.`,
+    )
   }
 
   const maxAgeDays = config.ageGate?.maxAgeDays
@@ -131,12 +156,10 @@ export function validateConsentConfig(
 }
 
 /** Id of the category gate helpers target when a gate names none. */
-export function defaultGateCategoryId(): string {
-  return (
-    resolved.gateCategory ??
-    resolved.categories.find((category) => category.analytics)?.id ??
-    'analytics'
-  )
+export function defaultGateCategoryId(
+  config: Readonly<ConsentConfig> = resolved,
+): string {
+  return config.gateCategory ?? 'analytics'
 }
 
 /**
@@ -144,29 +167,21 @@ export function defaultGateCategoryId(): string {
  * exactly the categories with `gpc: true`; otherwise it defaults to the default
  * gate category.
  */
-export function gpcClampedCategoryIds(): string[] {
-  const anyGpcFlag = resolved.categories.some(
+export function gpcClampedCategoryIds(
+  config: Readonly<ConsentConfig> = resolved,
+): string[] {
+  const anyGpcFlag = config.categories.some(
     (category) => category.gpc !== undefined,
   )
   if (anyGpcFlag) {
-    return resolved.categories
+    return config.categories
       .filter((category) => category.gpc)
       .map((category) => category.id)
   }
-  return [defaultGateCategoryId()]
+  return [defaultGateCategoryId(config)]
 }
 
 /** Whether a category is subject to the GPC clamp. */
 export function isGpcClamped(categoryId: string): boolean {
   return gpcClampedCategoryIds().includes(categoryId)
-}
-
-/**
- * True when GPC forces this category off by default. Independent of
- * `allowGpcOverride` — override governs the toggle/persistence, not the
- * default-off state — mirroring the `enabled` downgrade in run.ts
- * `buildCategories`. Consumed by both consent-mode modules.
- */
-export function gpcClampedOff(categoryId: string): boolean {
-  return isGpcClamped(categoryId) && hasGpcSignal()
 }

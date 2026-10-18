@@ -2,12 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <script src="/e2e/site/_recorder.js"></script>
     <title>Age gate</title>
     <link rel="stylesheet" href="/node_modules/vanilla-cookieconsent/dist/cookieconsent.css" />
-    <script>
-      if (document.cookie.split(/;\s*/).includes('e2e_age_verified=1'))
-        document.documentElement.classList.add('age-verified')
-    </script>
+<!-- age-gate-head -->
+<script>
+  if (document.cookie.split(/;\s*/).includes("e2e_age_verified=1"))
+    document.documentElement.classList.add("age-verified")
+</script>
+<!-- /age-gate-head -->
     <style>
       .age-verified #age-gate {
         display: none;
@@ -22,17 +25,32 @@
       }
     </script>
     <script type="text/plain" data-category="necessary">
-      window.necessaryRan = true
+      __rec.ran('necessary')
     </script>
     <script type="text/plain" data-category="analytics">
-      window.analyticsRan = true
+      __rec.ran('analytics')
     </script>
+    <script
+      type="text/plain"
+      data-category="analytics"
+      src="https://www.googletagmanager.com/gtag/js?id=G-TEST"
+    ></script>
     <script type="module">
-      import { initConsent, confirmAge } from '@kraftwerkdesign/consent'
+      import { initConsent, confirmAge, googleConsentMode } from '@kraftwerkdesign/consent'
       window.consentReady = initConsent({
         cookieName: 'e2e_consent',
+        integrations: [
+          googleConsentMode({
+            security_storage: 'necessary',
+            functionality_storage: 'necessary',
+            analytics_storage: 'analytics',
+            ad_storage: 'analytics',
+            ad_user_data: 'analytics',
+            ad_personalization: 'analytics',
+          }),
+        ],
         ageGate: { cookieName: 'e2e_age_verified' },
-      })
+      }).ready
       document.querySelector('#age-yes').addEventListener('click', () => {
         confirmAge()
         document.documentElement.classList.add('age-verified')

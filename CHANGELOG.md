@@ -7,20 +7,129 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Runtime rewrite around one controller and a consent snapshot. Contains breaking
+changes; no deprecation shims.
+
+### Changed
+
+- **BREAKING:** `initConsent()` returns a `ConsentHandle`, not a promise:
+  `await initConsent()` → `await initConsent().ready`. The handle has `ready`,
+  `getSnapshot`, `subscribe`, `has`, `require`, `prompt` and `destroy`.
+- **BREAKING:** `window.KDConsent` is
+  `{ has, require, prompt, confirmAge, getSnapshot }`.
+- **BREAKING:** the config is resolved and frozen at init. A repeat
+  `initConsent()` returns the same handle and warns when given options.
+- **BREAKING:** `consent:change` detail is the `ConsentSnapshot`
+  `{ stage, recorded, gpc, categories }`, frozen; `accepted` is dropped. It
+  fires once when ready and once per distinct change.
+- **BREAKING:** integrations: `integrations: [googleConsentMode({...}),
+  metaPixel({...})]` replaces the `googleConsentMode` / `metaPixelConsentMode`
+  booleans and the per-category `google` / `meta` fields. The gate category is
+  `gateCategory`, falling back to `'analytics'`. The default categories carry
+  no vendor mappings.
+- **BREAKING:** `validateConsentConfig(config)` takes one argument.
+- **BREAKING:** Meta: init sends `fbq('consent', 'revoke')` in every mode, with
+  no LDU. Each change sends only what differs, so a returning-rejected opt-out
+  visitor gets LDU only and a fresh opt-out visitor one `grant`.
+- **BREAKING:** GPC: a fresh GPC visitor gets the normal banner with a GPC
+  notice, and nothing is recorded automatically. Under the lock, clamped
+  categories are not registered with vanilla-cookieconsent and their autoClear
+  cookies are erased. `buildCopy` receives a `CopyContext` `{ gpc, mode }`
+  instead of a boolean. GPC visitors follow the reload policy.
+- **BREAKING:** reload: `reloadOnConsentChange` → `reload: 'never' |
+  'on-withdraw' | 'on-change'`, default `'on-withdraw'`. Accepting and an
+  opt-in reject no longer reload, so released scripts no longer run twice under
+  the default. `'on-change'` runs inline tags twice on a first Accept all. The
+  validator warns on the legacy key.
+- **BREAKING:** gated elements: `setupConsentGate()` → `attachGate()` and
+  `defineGatedElement()`, and `ConsentGate { activate, deactivate }` →
+  `GateOptions { mount: () => teardown | null }`. `attachGate()` needs
+  `initConsent()` first; without it, it warns and does nothing. Elements bind
+  only once a controller exists. Hosts carry `state="blocked|active"` and the
+  poster uses `hidden` instead of inline `display` styles; author CSS setting
+  `display` on the poster overrides `hidden`.
+- **BREAKING:** `renderGoogleConsentDefaultScript()` → the
+  `GOOGLE_CONSENT_DEFAULT_HEAD` constant (same snippet).
+
+### Removed
+
+- **BREAKING:** exports `configureConsent`, `getConsentConfig`, `runConsent`,
+  `installWindowApi`, `initConsentApi`, `hasConsent`, `requireConsent`,
+  `promptConsent`, `onConsentChange`, `hasAnalyticsConsent`,
+  `requireAnalyticsConsent`, `promptAnalyticsConsent`,
+  `onAnalyticsConsentChange`, `setupConsentGate`,
+  `renderGoogleConsentDefaultScript` and the `ConsentGate` type. Use the handle
+  or `window.KDConsent`.
+- **BREAKING:** the `data-require-analytics` attribute; use
+  `data-require-consent`.
+- **BREAKING:** the `analytics` field on `ConsentCategory`.
+- **BREAKING:** the `checkSignalMappings` argument of `validateConsentConfig`.
+- **BREAKING:** `gpcBannerAckKey`.
+
 ### Added
 
-- `ageGate: { cookieName, maxAgeDays? }` config plus `isAgeVerified()` /
-  `confirmAge()`. When set, the whole consent stack (banner, script release,
-  Consent Mode/Meta signals, `hasConsent()`) is held until the visitor passes a
-  site-rendered age gate. Passing never grants consent or overrides GPC.
-- Playwright e2e suite (`npm run test:e2e`) against fixture pages in `e2e/site/`.
+- **Age gate:** `ageGate: { cookieName?, maxAgeDays? }`, `confirmAge(opts?)`,
+  `isAgeVerified(opts?)` and `AGE_GATE_COOKIE` (`'kd_age_verified'`, the
+  default cookie name). Nothing tracks before `confirmAge()`: no banner, no
+  script release (`necessary` included), no integration updates, no event.
+  Only the deny-first defaults (Consent Mode `default`, Meta `revoke` when
+  `fbq` exists) run before the gate. `confirmAge()` before init, or with no
+  gate, writes the cookie. With `ageGate` set, init warns about ungated
+  Google / Meta tags and an existing `window.fbq`. Passing never grants consent,
+  overrides GPC or reloads.
+- `ageGateHeadScript({ cookieName?, className? })`.
+- `ConsentHandle.subscribe` / `getSnapshot` (fit `useSyncExternalStore`) and
+  `destroy()` for HMR and tests. `destroy()` unmounts gated elements and clears
+  a click's activation; they bind to the next controller.
+- One controller per page, shared by every copy of the package (global
+  versioned key).
+- `googleConsentMode(map)`: each signal maps to one or more categories.
+- `metaPixel({ category, ldu? })`: `ldu` defaults to `true` and only acts in
+  opt-out mode.
+- `ConsentIntegration` for custom integrations;
+  [docs/integrations.md](docs/integrations.md) with LinkedIn / Klaviyo recipes.
+- GPC override banner (`allowGpcOverride`): **Accept all** / **Keep off**.
+- `googleConsentMode` warns at init when an earlier `default` (the head
+  snippet) grants a signal the config denies before consent.
+- The validator warns on an empty GPC clamp set, unknown integration
+  categories, an unknown `reload` and a non-positive `ageGate.maxAgeDays`.
+- Gated-element content carries `data-consent-gated`.
+- Types: `AgeGateConfig`, `ConsentHandle`, `ConsentListener`,
+  `ConsentSnapshot`, `GpcState`, `ReloadPolicy`, `ResolvedConfig`,
+  `CopyContext`, `ConsentIntegration`, `GateOptions`, `Mount`,
+  `GoogleConsentMap`.
+- CI on pull requests and `main` (typecheck, unit tests, build, Playwright);
+  Playwright e2e suite (`npm run test:e2e`); a dry-run dispatch for the publish
+  workflow.
 
 ### Fixed
 
-- GPC without `allowGpcOverride` accepted and released the clamped category's
-  scripts: the lock marked it `readOnly`, which vanilla-cookieconsent always
-  accepts. The preference toggle is now disabled instead.
+- The GPC lock leaked: returning visitors who had accepted before enabling GPC
+  had their scripts released, and `data-cc="accept-all"`, a custom `buildCopy`
+  Accept all or `CookieConsent.acceptCategory()` could release clamped scripts.
+- The GPC lock rejected every non-necessary category, not only the clamped ones.
+- **BREAKING:** fresh opt-out visitors: `hasConsent()` was false, embeds stayed
+  blocked, `data-require-consent` blocked and the event said `accepted: false`
+  while their scripts ran. `has()` and `detail.categories` are now true for
+  the `enabled` defaults.
+- `consent:change`, Consent Mode updates and Meta calls fired 2–4 times per
+  load or choice.
+- Accepting released scripts live and then reloaded (double pageview); an
+  opt-in reject reloaded.
+- Embeds: a move across ticks duplicated content (it now re-creates the
+  mount), a clone kept Pour's iframe without consent, a withdrawal while
+  detached left content, Pour leaked `message` listeners, and a poster click
+  before consent needed a second click.
+- A second `initConsent()` swapped the config under a running banner.
+- Opt-out preferences copy said tools "only load after you opt in"; the copy is
+  mode-aware.
+- An integration or subscriber throw no longer stops later callbacks.
 - GPC visitors detected as bots (`hideFromBots`) made `initConsent()` reject.
+- The docs no longer claim the Consent Mode head default is safe for any
+  mapping. Drift tests now guard the documented head snippets.
+- `postversion` pushed the tag and created the GitHub Release before any test
+  ran. `preversion` now runs the unit tests and `publish.yml` runs CI before
+  `npm publish`.
 
 ## [0.7.0] - 2026-07-10
 
@@ -209,7 +318,8 @@ API-hardening pass from a multi-agent API review. Contains breaking changes.
 
 - Initial published baseline.
 
-[Unreleased]: https://github.com/Kraftwerk-Design/consent/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Kraftwerk-Design/consent/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Kraftwerk-Design/consent/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Kraftwerk-Design/consent/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Kraftwerk-Design/consent/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Kraftwerk-Design/consent/compare/v0.4.0...v0.4.1

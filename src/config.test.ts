@@ -5,9 +5,16 @@ import {
   defaultGateCategoryId,
   gpcClampedCategoryIds,
   isGpcClamped,
+  resolveConfig,
   validateConsentConfig,
 } from './config'
-import { defaultConsentConfig, type ConsentConfig } from './config.default'
+import { defaultConsentConfig, type ConsentConfig, type ConsentIntegration } from './config.default'
+
+const integration = (categories: string[]): ConsentIntegration => ({
+  name: 'test',
+  categories,
+  apply() {},
+})
 
 describe('defaultGateCategoryId', () => {
   it('prefers an explicit gateCategory', () => {
@@ -15,21 +22,14 @@ describe('defaultGateCategoryId', () => {
       gateCategory: 'functionality',
       categories: [
         { id: 'functionality' },
-        { id: 'analytics', analytics: true },
+        { id: 'analytics' },
       ],
     })
     expect(defaultGateCategoryId()).toBe('functionality')
   })
 
-  it('falls back to the analytics-flagged category', () => {
-    configureConsent({
-      categories: [{ id: 'necessary' }, { id: 'stats', analytics: true }],
-    })
-    expect(defaultGateCategoryId()).toBe('stats')
-  })
-
-  it("falls back to 'analytics' when nothing is flagged", () => {
-    configureConsent({ categories: [{ id: 'necessary' }] })
+  it("falls back to 'analytics'", () => {
+    configureConsent({ categories: [{ id: 'necessary' }, { id: 'analytics' }] })
     expect(defaultGateCategoryId()).toBe('analytics')
   })
 })
@@ -37,7 +37,7 @@ describe('defaultGateCategoryId', () => {
 describe('GPC-clamped set', () => {
   it('defaults to the default gate category when no gpc flags are set', () => {
     configureConsent({
-      categories: [{ id: 'necessary' }, { id: 'analytics', analytics: true }],
+      categories: [{ id: 'necessary' }, { id: 'analytics' }],
     })
     expect(gpcClampedCategoryIds()).toEqual(['analytics'])
     expect(isGpcClamped('analytics')).toBe(true)
@@ -49,7 +49,7 @@ describe('GPC-clamped set', () => {
       categories: [
         { id: 'necessary' },
         { id: 'functionality', gpc: false },
-        { id: 'analytics', analytics: true, gpc: true },
+        { id: 'analytics', gpc: true },
         { id: 'marketing', gpc: true },
       ],
     })
@@ -64,10 +64,9 @@ describe('validateConsentConfig', () => {
     ...defaultConsentConfig,
     categories: [
       { id: 'necessary', enabled: true, readOnly: true },
-      { id: 'analytics', analytics: true },
+      { id: 'analytics' },
     ],
-    googleConsentMode: false,
-    metaPixelConsentMode: false,
+    integrations: [integration(['necessary', 'analytics'])],
     gateCategory: undefined,
   }
 
@@ -81,30 +80,53 @@ describe('validateConsentConfig', () => {
       gateCategory: 'nonexistent',
     }
     const warnings = validateConsentConfig(config)
-    expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatch(/nonexistent/)
+    expect(warnings).toEqual([
+      expect.stringMatching(/nonexistent/),
+      expect.stringMatching(/GPC clamp/),
+    ])
   })
 
-  it("flags no analytics:true category and no 'analytics'-id category", () => {
+  it("flags a missing 'analytics' category when gateCategory is unset", () => {
     const config: ConsentConfig = {
       ...cleanConfig,
       categories: [{ id: 'necessary' }, { id: 'stats' }],
+      integrations: [],
     }
     const warnings = validateConsentConfig(config)
-    expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatch(/analytics/)
+    expect(warnings).toEqual([
+      expect.stringMatching(/default gate category 'analytics'/),
+      expect.stringMatching(/GPC clamp/),
+    ])
   })
 
-  it('flags more than one category with analytics: true', () => {
+  it('S-O2a flags an empty GPC clamp set', () => {
     const config: ConsentConfig = {
       ...cleanConfig,
       categories: [
-        { id: 'stats', analytics: true },
-        { id: 'marketing', analytics: true },
+        { id: 'necessary', enabled: true, readOnly: true },
+        { id: 'analytics', gpc: false },
       ],
     }
     const warnings = validateConsentConfig(config)
-    expect(warnings.some((w) => /analytics: true/.test(w))).toBe(true)
+    expect(warnings).toEqual([expect.stringMatching(/GPC clamp/)])
+  })
+
+  it('S-O2a flags a GPC clamp set holding only readOnly categories', () => {
+    const config: ConsentConfig = {
+      ...cleanConfig,
+      gateCategory: 'necessary',
+    }
+    const warnings = validateConsentConfig(config)
+    expect(warnings).toEqual([expect.stringMatching(/GPC clamp/)])
+  })
+
+  it('S-O2a flags an integration naming an unknown category', () => {
+    const config: ConsentConfig = {
+      ...cleanConfig,
+      integrations: [integration(['analytics', 'marketing'])],
+    }
+    const warnings = validateConsentConfig(config)
+    expect(warnings).toEqual([expect.stringMatching(/'test'.*'marketing'/)])
   })
 
   it.each([0, -1, NaN])('flags ageGate.maxAgeDays of %s', (maxAgeDays) => {
@@ -125,11 +147,31 @@ describe('validateConsentConfig', () => {
     ).toEqual([])
   })
 
+  it.each(['never', 'on-withdraw', 'on-change'] as const)('accepts reload: %s', (reload) => {
+    expect(validateConsentConfig({ ...cleanConfig, reload })).toEqual([])
+  })
+
+  it('flags an unknown reload policy', () => {
+    const warnings = validateConsentConfig({
+      ...cleanConfig,
+      reload: true as unknown as ConsentConfig['reload'],
+    })
+    expect(warnings).toEqual([expect.stringMatching(/^reload must be one of .*\(got true\)/)])
+  })
+
+  it('flags the removed reloadOnConsentChange option', () => {
+    const warnings = validateConsentConfig({
+      ...cleanConfig,
+      reloadOnConsentChange: false,
+    } as ConsentConfig)
+    expect(warnings).toEqual([expect.stringMatching(/reloadOnConsentChange.*reload: 'never'/)])
+  })
+
   it('flags duplicate category ids', () => {
     const config: ConsentConfig = {
       ...cleanConfig,
       categories: [
-        { id: 'analytics', analytics: true },
+        { id: 'analytics' },
         { id: 'analytics' },
       ],
     }
@@ -137,30 +179,6 @@ describe('validateConsentConfig', () => {
     expect(warnings.some((w) => /duplicate/i.test(w) && /analytics/.test(w))).toBe(
       true,
     )
-  })
-
-  it('flags google signals on a category when googleConsentMode is false', () => {
-    const config: ConsentConfig = {
-      ...cleanConfig,
-      googleConsentMode: false,
-      categories: [
-        { id: 'analytics', analytics: true, google: ['analytics_storage'] },
-      ],
-    }
-    const warnings = validateConsentConfig(config)
-    expect(
-      warnings.some((w) => /google/i.test(w) && /analytics/.test(w)),
-    ).toBe(true)
-  })
-
-  it('flags meta: true on a category when metaPixelConsentMode is false', () => {
-    const config: ConsentConfig = {
-      ...cleanConfig,
-      metaPixelConsentMode: false,
-      categories: [{ id: 'analytics', analytics: true, meta: true }],
-    }
-    const warnings = validateConsentConfig(config)
-    expect(warnings.some((w) => /meta/i.test(w))).toBe(true)
   })
 
   it('never throws, even on a pathological config', () => {
@@ -171,6 +189,15 @@ describe('validateConsentConfig', () => {
 })
 
 describe('configureConsent runtime validation', () => {
+  it('warns when the options pass the removed reloadOnConsentChange', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    configureConsent({ reloadOnConsentChange: false } as Partial<ConsentConfig>)
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[consent\] reloadOnConsentChange/))
+    warnSpy.mockRestore()
+  })
+
   it('console.warns each validation warning after merging overrides', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -193,7 +220,7 @@ describe('configureConsent runtime validation', () => {
     configureConsent({
       categories: [
         { id: 'necessary', enabled: true, readOnly: true },
-        { id: 'analytics', analytics: true },
+        { id: 'analytics' },
       ],
     })
 
@@ -203,8 +230,6 @@ describe('configureConsent runtime validation', () => {
   })
 
   it('does not warn for the shipped defaults (no overrides)', () => {
-    // The defaults carry google/meta mappings with both consent modes off; that
-    // latent state must not warn against itself on a plain quick-start install.
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     configureConsent()
@@ -214,20 +239,64 @@ describe('configureConsent runtime validation', () => {
     warnSpy.mockRestore()
   })
 
-  it('still warns when a project authors categories with mappings but leaves the mode off', () => {
+  it('warns when an integration names a category the defaults lack', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    configureConsent({
-      categories: [
-        { id: 'necessary', enabled: true, readOnly: true },
-        { id: 'analytics', analytics: true, google: ['analytics_storage'], meta: true },
-      ],
-    })
+    configureConsent({ integrations: [integration(['marketing'])] })
 
-    const warned = warnSpy.mock.calls.map((c) => c[0] as string)
-    expect(warned.some((w) => /google/i.test(w))).toBe(true)
-    expect(warned.some((w) => /meta/i.test(w))).toBe(true)
+    expect(warnSpy.mock.calls).toEqual([[expect.stringMatching(/^\[consent\] .*'marketing'/)]])
 
     warnSpy.mockRestore()
+  })
+})
+
+describe('resolveConfig', () => {
+  it("copies the caller's options instead of freezing them", () => {
+    const autoClear = [{ name: '_ga' }]
+    const categories: ConsentConfig['categories'] = [{ id: 'analytics', autoClear }]
+    const ageGate = { maxAgeDays: 7 }
+    const integrations = [integration(['analytics'])]
+    resolveConfig({ categories, ageGate, integrations })
+
+    expect(Object.isFrozen(categories)).toBe(false)
+    expect(Object.isFrozen(categories[0])).toBe(false)
+    expect(Object.isFrozen(ageGate)).toBe(false)
+    expect(Object.isFrozen(integrations)).toBe(false)
+    categories.push({ id: 'marketing' })
+    autoClear.push({ name: '_gid' })
+    expect(categories).toHaveLength(2)
+    expect(Object.isFrozen(defaultConsentConfig.categories)).toBe(false)
+  })
+
+  it('deeply freezes the resolved config, nested arrays included', () => {
+    const config = resolveConfig({
+      categories: [
+        { id: 'analytics', autoClear: [{ name: /^_ga/ }] },
+      ],
+    })
+    const [category] = config.categories
+
+    expect(Object.isFrozen(config)).toBe(true)
+    expect(Object.isFrozen(config.categories)).toBe(true)
+    expect(Object.isFrozen(category)).toBe(true)
+    expect(Object.isFrozen(category.autoClear)).toBe(true)
+    expect(Object.isFrozen(category.autoClear![0])).toBe(true)
+    expect(Object.isFrozen(config.guiOptions)).toBe(true)
+    expect(category.autoClear![0].name).toBeInstanceOf(RegExp)
+  })
+
+  it('freezes the integrations list but keeps each integration by reference', () => {
+    const google = integration(['analytics'])
+    const config = resolveConfig({ integrations: [google] })
+
+    expect(Object.isFrozen(config.integrations)).toBe(true)
+    expect(config.integrations[0]).toBe(google)
+    expect(Object.isFrozen(google)).toBe(false)
+  })
+
+  it('fills in the age gate cookie name', () => {
+    expect(resolveConfig({ ageGate: {} }).ageGate?.cookieName).toBe('kd_age_verified')
+    expect(resolveConfig({ ageGate: { cookieName: 'x' } }).ageGate?.cookieName).toBe('x')
+    expect(resolveConfig().ageGate).toBeUndefined()
   })
 })

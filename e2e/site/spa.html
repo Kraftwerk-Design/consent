@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <script src="/e2e/site/_recorder.js" data-fbq></script>
+    <title>SPA</title>
+    <link rel="stylesheet" href="/node_modules/vanilla-cookieconsent/dist/cookieconsent.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "vanilla-cookieconsent": "/node_modules/vanilla-cookieconsent/dist/cookieconsent.esm.js",
+          "@kraftwerkdesign/consent": "/dist/index.js"
+        }
+      }
+    </script>
+    <script type="text/plain" data-category="analytics">
+      __rec.ran('analytics')
+      document.cookie = '_ga=GA1.1.e2e; Path=/'
+    </script>
+    <script type="module">
+      import { initConsent, googleConsentMode, metaPixel } from '@kraftwerkdesign/consent'
+      window.consentReady = initConsent({
+        cookieName: 'e2e_consent',
+        reload: 'never',
+        integrations: [
+          googleConsentMode({
+            security_storage: 'necessary',
+            functionality_storage: 'necessary',
+            analytics_storage: 'analytics',
+            ad_storage: 'analytics',
+            ad_user_data: 'analytics',
+            ad_personalization: 'analytics',
+          }),
+          metaPixel({ category: 'analytics' }),
+        ],
+      }).ready
+    </script>
+  </head>
+  <body>
+    <h1>SPA</h1>
+    <consent-embed id="map" category="analytics" autoactivate>
+      <button data-poster>Show map</button>
+      <template><iframe title="map" src="about:blank"></iframe></template>
+    </consent-embed>
+  </body>
+</html>

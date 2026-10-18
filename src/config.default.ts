@@ -1,14 +1,7 @@
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
-
-/** A Google Consent Mode v2 signal. */
-export type GoogleConsentSignal =
-  | 'ad_storage'
-  | 'ad_user_data'
-  | 'ad_personalization'
-  | 'analytics_storage'
-  | 'functionality_storage'
-  | 'personalization_storage'
-  | 'security_storage'
+import type { ResolvedConfig } from './config'
+import type { ReloadPolicy } from './core/reload'
+import type { ConsentSnapshot, GpcState } from './core/snapshot'
 
 /** A cookie a category clears on opt-out. */
 export interface AutoClearCookie {
@@ -17,8 +10,8 @@ export interface AutoClearCookie {
 
 /** Age-gate persistence. See {@link ConsentConfig.ageGate}. */
 export interface AgeGateConfig {
-  /** First-party cookie recording a passed gate. */
-  cookieName: string
+  /** First-party cookie recording a passed gate. Defaults to `AGE_GATE_COOKIE`. */
+  cookieName?: string
   /** Lifetime of a passed gate, in days. Defaults to 30. */
   maxAgeDays?: number
 }
@@ -32,35 +25,25 @@ export interface CategoryCopy {
 /**
  * A consent category. Add as many as a project needs — each one is registered
  * with vanilla-cookieconsent and rendered as a section in the preferences
- * modal. Exactly one category should set `analytics: true`; that is the bucket
- * the imperative gate helpers (`hasAnalyticsConsent` / `requireAnalyticsConsent`)
- * key off, and the one GPC forces to read-only (unless `allowGpcOverride`).
+ * modal. The default gate category (`gateCategory`, else `'analytics'`) is the
+ * default target of `has()` / `require()`, and the one GPC clamps by default.
  */
 export interface ConsentCategory {
   /** Category id used by vanilla-cookieconsent and `linkedCategory` in copy. */
   id: string
   /** Enabled by default (necessary categories only). */
   enabled?: boolean
-  /**
-   * Locked on (necessary categories). GPC also forces any GPC-clamped category
-   * read-only — unless `allowGpcOverride` is set, in which case the visitor
-   * keeps control of it. See the per-category `gpc` flag for which categories are clamped.
-   */
+  /** Locked on (necessary categories). */
   readOnly?: boolean
-  /** Marks the consent-gated tracking bucket the JS gate helpers check. */
-  analytics?: boolean
   /**
-   * Subject to the GPC clamp — forced read-only / off when a GPC signal is
-   * present (unless `allowGpcOverride`). When no category sets this flag, the
-   * clamped set defaults to the default gate category (the `analytics` one).
+   * Subject to the GPC clamp: under a GPC signal it is not registered with the
+   * banner and never effective (off by default with `allowGpcOverride`). When
+   * no category sets this flag, the clamped set defaults to the default gate
+   * category.
    */
   gpc?: boolean
-  /** Grants the Meta Pixel when this category is consented (binary). */
-  meta?: boolean
   /** Cookies cleared when this category is opted out of. */
   autoClear?: AutoClearCookie[]
-  /** Google Consent Mode v2 signals this category grants when consented. */
-  google?: GoogleConsentSignal[]
   /** Preferences-modal section copy. Add copy here when adding a category. */
   copy?: CategoryCopy
 }
@@ -79,7 +62,7 @@ export interface ConsentConfig {
   categories: ConsentCategory[]
   /**
    * Id of the category the JS gate helpers target when a gate names none.
-   * Falls back to the category flagged `analytics: true`, then `'analytics'`.
+   * Falls back to `'analytics'`.
    */
   gateCategory?: string
   /**
@@ -89,15 +72,14 @@ export interface ConsentConfig {
   ageGate?: AgeGateConfig
   /** Custom DOM event dispatched when consent changes. */
   consentChangeEvent: string
-  /** sessionStorage key — GPC acknowledgment banner dismissed this session. */
-  gpcBannerAckKey: string
   /**
    * Let a visitor explicitly opt back into the analytics category even when
    * their browser sends a GPC signal. When `true`, GPC is honored as the
    * *default* — analytics starts off and the banner explains the signal — but
    * the preferences toggle stays operable and a saved opt-in is respected on
-   * every load. When `false` (the default), GPC is a hard lock: the analytics
-   * category is forced read-only and re-clamped to necessary-only each load.
+   * every load. When `false` (the default), GPC is a hard lock: clamped
+   * categories are not registered with the banner, so no button, toggle or
+   * `acceptCategory()` call can release their scripts.
    *
    * Enabling this has legal implications where GPC is a binding opt-out
    * (e.g. CCPA/CPRA); the override must be a genuine, user-initiated action.
@@ -107,38 +89,55 @@ export interface ConsentConfig {
    */
   allowGpcOverride: boolean
   /**
-   * Reload the page when consent changes (non-GPC) so server-blocked
-   * `type="text/plain"` script tags re-activate. Set false for SPA-style
-   * sites that rely on the live `onAnalyticsConsentChange` listeners instead.
+   * When a visitor's choice reloads the page. Accepting releases blocked
+   * scripts live, so only withdrawing needs a reload to stop scripts that
+   * already ran. Never reloads on load or `confirmAge()`.
+   * - `'on-withdraw'` (default): a category goes from granted to denied.
+   * - `'on-change'`: any category changes. Scripts released by an accept run
+   *   twice: live, then after the reload.
+   * - `'never'`: SPAs and pages that react to `consent:change` themselves.
    */
-  reloadOnConsentChange: boolean
+  reload: ReloadPolicy
   /**
-   * Enable Google Consent Mode v2 signaling. Off when omitted/false. Pushes a
-   * consent `default` at init and a consent `update` on every change, mapped
-   * from each category's `google` signals. Direction follows `mode` via each
-   * category's `enabled` baseline: opt-out categories (`enabled: true`) default
-   * to granted (CCPA); opt-in consent-gated categories (`enabled: false`)
-   * default to denied. GPC forces the clamped signals denied either way.
+   * Vendor consent signaling, e.g.
+   * `[googleConsentMode({...}), metaPixel({ category: 'analytics' })]`.
    */
-  googleConsentMode: boolean
-  /**
-   * Enable Meta Pixel consent signaling. Off when omitted. Grants/revokes the
-   * pixel (`fbq('consent', …)`) from each category's `meta` flag on consent
-   * change. Direction follows `mode`: opt-in starts revoked and grants on
-   * consent; opt-out starts granted and, on opt-out, applies Limited Data Use
-   * (LDU) *and* revokes. GPC forces the clamped categories off either way.
-   * The library manages the live session only — it cannot suppress the
-   * page-load PageView (set the pre-`fbq('init')` state inline in `<head>`; see
-   * README). The pixel base code must load before initConsent() — the library
-   * never injects or stubs `fbq`.
-   */
-  metaPixelConsentMode: boolean
+  integrations: ConsentIntegration[]
   guiOptions: CookieConsentConfig['guiOptions']
   /**
    * Override the banner/preferences copy wholesale. Defaults to the built-in
-   * English copy, which renders a section per configured category.
+   * English copy, which renders a section per configured category. Under GPC
+   * `default-off` the banner's `acceptNecessaryBtn` acts as **Keep off**: it
+   * saves the defaults minus the GPC-clamped categories.
    */
-  buildCopy?: (gpcActive: boolean) => CookieConsentConfig['language']
+  buildCopy?: (context: CopyContext) => CookieConsentConfig['language']
+}
+
+/**
+ * Feeds consent state into a vendor (Google Consent Mode, Meta Pixel, …).
+ * Signals only: it never loads or blocks the vendor's tags.
+ */
+export interface ConsentIntegration {
+  readonly name: string
+  /** Category ids it reads. The validator warns about unknown ones. */
+  readonly categories: readonly string[]
+  /**
+   * Called once at init, before any age gate: send the deny-first default.
+   * Synchronous and non-transmitting (queue commands, never fetch).
+   */
+  init?(config: ResolvedConfig): void
+  /**
+   * Called once per distinct snapshot change once ready, never while awaiting
+   * the age gate. `prev` is null on the first call: diff against the `init`
+   * default. Send only what changed.
+   */
+  apply(next: ConsentSnapshot, prev: ConsentSnapshot | null): void
+}
+
+/** What {@link ConsentConfig.buildCopy} is built for. */
+export interface CopyContext {
+  gpc: GpcState
+  mode: ConsentConfig['mode']
 }
 
 /** Defaults shared across Kraftwerk consent implementations. */
@@ -154,7 +153,6 @@ export const defaultConsentConfig: ConsentConfig = {
       id: 'necessary',
       enabled: true,
       readOnly: true,
-      google: ['security_storage', 'functionality_storage'],
       copy: {
         title: 'Strictly necessary',
         description:
@@ -163,14 +161,6 @@ export const defaultConsentConfig: ConsentConfig = {
     },
     {
       id: 'analytics',
-      analytics: true,
-      meta: true,
-      google: [
-        'analytics_storage',
-        'ad_storage',
-        'ad_user_data',
-        'ad_personalization',
-      ],
       autoClear: [
         { name: /^_ga/ },
         { name: '_gid' },
@@ -188,15 +178,11 @@ export const defaultConsentConfig: ConsentConfig = {
 
   consentChangeEvent: 'consent:change',
 
-  gpcBannerAckKey: 'site_gpc_banner_ack',
-
   allowGpcOverride: false,
 
-  reloadOnConsentChange: true,
+  reload: 'on-withdraw',
 
-  googleConsentMode: false,
-
-  metaPixelConsentMode: false,
+  integrations: [],
 
   guiOptions: {
     consentModal: {

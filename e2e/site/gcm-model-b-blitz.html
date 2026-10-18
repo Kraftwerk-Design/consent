@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <script src="/e2e/site/_recorder.js"></script>
+    <title>GCM Model B, cached page</title>
+    <link rel="stylesheet" href="/node_modules/vanilla-cookieconsent/dist/cookieconsent.css" />
+<!-- gcm-head -->
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() { dataLayer.push(arguments); }
+  gtag('consent', 'default', {
+    security_storage: 'granted',
+    functionality_storage: 'granted',
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'denied',
+    wait_for_update: 500,
+  });
+</script>
+<!-- /gcm-head -->
+    <script src="/e2e/site/fake-gtag.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "vanilla-cookieconsent": "/node_modules/vanilla-cookieconsent/dist/cookieconsent.esm.js",
+          "@kraftwerkdesign/consent": "/dist/index.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import { initConsent, googleConsentMode } from '@kraftwerkdesign/consent'
+      const mode = new URLSearchParams(location.search).get('mode') ?? 'opt-in'
+      window.consentReady = initConsent({
+        mode,
+        cookieName: 'e2e_consent',
+        categories: [
+          { id: 'necessary', enabled: true, readOnly: true },
+          { id: 'analytics', enabled: mode === 'opt-out' },
+        ],
+        integrations: [
+          googleConsentMode({
+            security_storage: 'necessary',
+            functionality_storage: 'necessary',
+            analytics_storage: 'analytics',
+            ad_storage: 'analytics',
+            ad_user_data: 'analytics',
+            ad_personalization: 'analytics',
+          }),
+        ],
+      }).ready
+    </script>
+  </head>
+  <body>
+    <h1>GCM Model B, cached page</h1>
+  </body>
+</html>

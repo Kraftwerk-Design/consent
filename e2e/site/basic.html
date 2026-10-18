@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <script src="/e2e/site/_recorder.js"></script>
     <title>Basic</title>
     <link rel="stylesheet" href="/node_modules/vanilla-cookieconsent/dist/cookieconsent.css" />
     <script type="importmap">
@@ -13,11 +14,12 @@
       }
     </script>
     <script type="text/plain" data-category="analytics">
-      window.analyticsRan = true
+      __rec.ran('analytics')
     </script>
     <script type="module">
       import { initConsent } from '@kraftwerkdesign/consent'
-      window.consentReady = initConsent({ cookieName: 'e2e_consent' })
+      const reload = new URLSearchParams(location.search).get('reload')
+      window.consentReady = initConsent({ cookieName: 'e2e_consent', ...(reload && { reload }) }).ready
     </script>
   </head>
   <body>

@@ -1,67 +1,81 @@
 # Meta Pixel Consent Mode
 
-Feed consent state into the Meta Pixel. Off by default — set
-`metaPixelConsentMode: true` to enable.
-
-Meta's consent API is **binary**: `fbq('consent','grant')` /
-`fbq('consent','revoke')` turn the whole pixel on/off, plus **Limited Data Use
-(LDU)** for US-state opt-outs. Flag the granting categories with `meta: true`
-— the pixel is granted if **any** `meta` category is consented:
+Feed consent state into the Meta Pixel. Add the `metaPixel` integration to
+enable it:
 
 ```ts
-categories: [
-  { id: 'necessary', enabled: true, readOnly: true },
-  { id: 'analytics', analytics: true, meta: true,
-    google: ['analytics_storage', 'ad_storage', 'ad_user_data', 'ad_personalization'] },
-]
+import { initConsent, metaPixel } from '@kraftwerkdesign/consent'
+
+initConsent({
+  integrations: [metaPixel({ category: 'analytics' })],
+})
 ```
 
-## Direction follows `mode`
+Meta's consent API is **binary**: `fbq('consent','grant')` /
+`fbq('consent','revoke')` turn the whole pixel on/off. `category` takes one id
+or an array; the pixel is granted if **any** of them is granted.
 
-- **opt-in (GDPR):** the pixel starts revoked and is granted on consent;
-  withdrawal revokes. LDU is never used.
-- **opt-out (CCPA):** the pixel starts granted; opting out emits **both**
-  `fbq('dataProcessingOptions', ['LDU'], 0, 0)` and `fbq('consent','revoke')`,
-  and opting back in grants and clears LDU (`fbq('dataProcessingOptions', [])`).
+## What it sends
 
-> **LDU geo caveat:** `['LDU'], 0, 0` only takes effect where Meta geolocates a
-> covered US state — which is why opt-out also `revoke`s, so a recorded opt-out
-> holds events everywhere. The trade-off is that revoke suppresses Meta's
-> modeled conversions even in covered states.
+Init sends `fbq('consent','revoke')` in every mode. Each change then sends only
+what differs from the previous state.
 
-**GPC is honored in both modes** — a GPC visitor's `meta` category is forced off
-by default (revoke under opt-in; revoke + LDU under opt-out), **even under
-`allowGpcOverride`** (override only lets a saved opt-in later grant).
+| Mode | `ldu` | Denied | Granted |
+|---|---|---|---|
+| opt-in | any | `revoke` | `grant` |
+| opt-out | `true` (default) | `dataProcessingOptions(['LDU'], 0, 0)` + `revoke` | `grant` + `dataProcessingOptions([])` |
+| opt-out | `false` | `revoke` | `grant` |
 
-## The page-load PageView is yours to set (both modes)
+**Limited Data Use (LDU)** is for US-state opt-outs; `0, 0` lets Meta geolocate
+and only covered states are limited, which is why opt-out also `revoke`s. Opt-in
+never calls `dataProcessingOptions`. Set `ldu: false` to skip it.
 
-Unlike Google Consent Mode, Meta has **no update buffering** (`wait_for_update`),
-and `dataProcessingOptions` must be set **before** `fbq('init', …)`. The pixel
-base code fires `PageView` at `init` — before `initConsent()` runs — so the
-library **cannot** suppress that first PageView. It manages the *live session*
-(every event after a consent change); the page-load state is set inline in
-`<head>` before `fbq('init', …)`:
+**GPC is honored in both modes** — a GPC visitor's category is forced off by
+default, **even under `allowGpcOverride`** (override only lets a saved opt-in
+later grant).
 
-- **opt-in** — inline `fbq('consent','revoke');` before `fbq('init', …)` so the
-  pixel holds all events until the library grants on consent:
+## Head / init order
 
-  ```html
-  <script>
-    // …standard Meta base code up to fbq definition…
-    fbq('consent', 'revoke');
-    fbq('init', 'YOUR_PIXEL_ID');
-    fbq('track', 'PageView');
-  </script>
-  ```
+Meta has **no update buffering** (`wait_for_update`), and Meta documents
+`dataProcessingOptions` **before** `fbq('init', …)`. The integration runs after
+the base code, so LDU only reaches a pixel that is already running and may apply
+late, and the library **cannot** suppress the PageView the base code fires at
+`init`. It manages every event after that.
 
-- **opt-out** — a static inline snippet can't reproduce a *returning* visitor's
-  saved opt-out. For reliable opt-out, **gate the pixel base code** like any
-  blocked script (`type="text/plain" data-category="analytics"` or defer its
-  load) so `init`/PageView only fire after a choice. Otherwise a returning
-  opted-out visitor's first PageView on each load fires before the library
-  revokes.
+The library **never stubs `fbq`**: the base snippet's `if (f.fbq) return` guard
+would then skip pixel init. Keep the base code in `<head>` **above** the bundle:
 
-> **Base code must load first, and the library never stubs `fbq`.** `getFbq()`
-> uses `window.fbq` only if it is already defined; it never synthesizes a stub,
-> because the Meta base snippet's `if (f.fbq) return` guard would then skip
-> pixel initialization. Keep the pixel base code in `<head>`, above your bundle.
+<!-- meta-head -->
+```html
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('consent', 'revoke');
+fbq('init', 'YOUR_PIXEL_ID');
+fbq('track', 'PageView');
+</script>
+```
+<!-- /meta-head -->
+
+```html
+<script type="module">
+  import { initConsent, metaPixel } from '@kraftwerkdesign/consent'
+  initConsent({
+    mode: 'opt-out',
+    integrations: [metaPixel({ category: 'analytics' })],
+  })
+</script>
+```
+
+The inline `fbq('consent','revoke')` before `init` holds the page-load PageView
+until the library grants. A static snippet can't reproduce a returning
+visitor's saved opt-out, so for strict opt-out **gate the base code** instead
+(`type="text/plain" data-category="analytics"`): `fbq` is then absent at init,
+the integration sends nothing, and the pixel only loads once its category is
+granted.

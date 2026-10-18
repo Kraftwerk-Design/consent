@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <script src="/e2e/site/_recorder.js"></script>
+    <title>Embeds</title>
+    <link rel="stylesheet" href="/node_modules/vanilla-cookieconsent/dist/cookieconsent.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "vanilla-cookieconsent": "/node_modules/vanilla-cookieconsent/dist/cookieconsent.esm.js",
+          "@kraftwerkdesign/consent": "/dist/index.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import { initConsent } from '@kraftwerkdesign/consent'
+      window.consentReady = initConsent({
+        mode: 'opt-out',
+        cookieName: 'e2e_consent',
+        reload: 'never',
+        categories: [
+          { id: 'necessary', enabled: true, readOnly: true },
+          { id: 'analytics', enabled: true },
+        ],
+      }).ready
+
+      // On document so the buttons keep working after the body is swapped.
+      const actions = {
+        move: () => document.querySelector('#side').append(document.querySelector('#map')),
+        clone: () => document.querySelector('#side').append(document.querySelector('#map').cloneNode(true)),
+        'router-move': () => {
+          const map = document.querySelector('#map')
+          document.querySelector('#page').remove()
+          setTimeout(() => {
+            const next = document.createElement('main')
+            next.id = 'next'
+            next.append(map)
+            document.body.append(next)
+          })
+        },
+        snapshot: () => (window.bodySnapshot = document.body.cloneNode(true)),
+        restore: () => document.body.replaceWith(window.bodySnapshot),
+      }
+      document.addEventListener('click', (event) => {
+        const action = event.target.closest('[data-action]')?.dataset.action
+        if (action) actions[action]()
+      })
+    </script>
+  </head>
+  <body>
+    <nav>
+      <button data-action="move">Move</button>
+      <button data-action="router-move">Router move</button>
+      <button data-action="clone">Clone</button>
+      <button data-action="snapshot">Snapshot body</button>
+      <button data-action="restore">Restore body</button>
+    </nav>
+    <main id="page">
+      <consent-embed id="map" autoactivate>
+        <button data-poster>Show map</button>
+        <template><iframe title="map" src="about:blank"></iframe></template>
+      </consent-embed>
+      <consent-pour shelf="2556d19f-4e68-4b41-bbef-15ee098aea17" autoactivate>
+        <button data-poster>Enable the wine finder</button>
+      </consent-pour>
+    </main>
+    <aside id="side"></aside>
+  </body>
+</html>

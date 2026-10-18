@@ -16,7 +16,7 @@ describe('config defaults', () => {
 
   it('carries a per-category gpc flag through configuration', () => {
     configureConsent({
-      categories: [{ id: 'analytics', analytics: true, gpc: true }],
+      categories: [{ id: 'analytics', gpc: true }],
     })
     expect(getConsentConfig().categories[0].gpc).toBe(true)
   })
@@ -29,35 +29,14 @@ describe('config defaults', () => {
   })
 })
 
-describe('googleConsentMode defaults', () => {
-  it('is off by default', () => {
-    expect(defaultConsentConfig.googleConsentMode).toBe(false)
-  })
-
-  it('maps default categories to Consent Mode signals', () => {
-    const byId = Object.fromEntries(
-      defaultConsentConfig.categories.map((c) => [c.id, c]),
-    )
-    expect(byId.necessary.google).toEqual([
-      'security_storage',
-      'functionality_storage',
-    ])
-    expect(byId.analytics.google).toEqual([
-      'analytics_storage',
-      'ad_storage',
-      'ad_user_data',
-      'ad_personalization',
-    ])
+describe('reload defaults', () => {
+  it('reloads only on withdraw by default', () => {
+    expect(defaultConsentConfig.reload).toBe('on-withdraw')
   })
 })
 
-describe('Meta Pixel consent config', () => {
-  it('defaults metaPixelConsentMode to false', () => {
-    expect(defaultConsentConfig.metaPixelConsentMode).toBe(false)
-  })
-
-  it('flags the default analytics category with meta: true', () => {
-    const analytics = defaultConsentConfig.categories.find((c) => c.analytics)
-    expect(analytics?.meta).toBe(true)
+describe('integration defaults', () => {
+  it('ships no integrations', () => {
+    expect(defaultConsentConfig.integrations).toEqual([])
   })
 })
