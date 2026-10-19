@@ -63,3 +63,26 @@ test("S-P1 reload: 'never' applies accept and withdraw live, without navigating"
   expect(await runs(page, 'analytics')).toBe(1)
   expect(await navigations(page)).toBe(nav)
 })
+
+test('S-K14 S-K13 a poster click before consent opens preferences; accepting mounts it and runs its script once', async ({
+  page,
+}) => {
+  await page.goto(URL)
+  await ready(page)
+  await page.locator('#cc-main .cm [data-role="show"]').click()
+  await page.locator('#cc-main .pm [data-role="necessary"]').click()
+  await expect(page.locator('#cc-main .pm')).toBeHidden()
+
+  await page.locator('#video [data-poster]').click()
+
+  await expect(page.locator('#cc-main .pm')).toBeVisible()
+  await expect(page.locator('#video')).toHaveAttribute('state', 'blocked')
+  expect(await runs(page, 'embed')).toBe(0)
+
+  await page.locator('#cc-main .pm [data-role="all"]').click()
+
+  await expect(page.locator('#video')).toHaveAttribute('state', 'active')
+  await expect(page.locator('#video-content')).toHaveCount(1)
+  await expect(page.locator('#video [data-poster]')).toBeHidden()
+  expect(await runs(page, 'embed')).toBe(1)
+})

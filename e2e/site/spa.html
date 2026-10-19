@@ -42,5 +42,14 @@
       <button data-poster>Show map</button>
       <template><iframe title="map" src="about:blank"></iframe></template>
     </consent-embed>
+    <consent-embed id="video" category="analytics">
+      <button data-poster>Play video</button>
+      <template>
+        <p id="video-content">video</p>
+        <script>
+          __rec.ran('embed')
+        </script>
+      </template>
+    </consent-embed>
   </body>
 </html>

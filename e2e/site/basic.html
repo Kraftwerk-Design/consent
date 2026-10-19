@@ -18,11 +18,18 @@
     </script>
     <script type="module">
       import { initConsent } from '@kraftwerkdesign/consent'
-      const reload = new URLSearchParams(location.search).get('reload')
-      window.consentReady = initConsent({ cookieName: 'e2e_consent', ...(reload && { reload }) }).ready
+      const params = new URLSearchParams(location.search)
+      const reload = params.get('reload')
+      window.consentReady = initConsent({
+        cookieName: 'e2e_consent',
+        ...(reload && { reload }),
+        ...(params.has('gpcOverride') && { allowGpcOverride: true }),
+      }).ready
     </script>
   </head>
   <body>
     <h1>Basic</h1>
+    <a id="gated" href="#next" data-require-consent="analytics">Open in maps</a>
+    <button id="page-accept-all" data-cc="accept-all">Accept all</button>
   </body>
 </html>

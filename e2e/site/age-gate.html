@@ -37,8 +37,16 @@
     ></script>
     <script type="module">
       import { initConsent, confirmAge, googleConsentMode } from '@kraftwerkdesign/consent'
+      const optOut = new URLSearchParams(location.search).get('mode') === 'opt-out'
       window.consentReady = initConsent({
         cookieName: 'e2e_consent',
+        ...(optOut && {
+          mode: 'opt-out',
+          categories: [
+            { id: 'necessary', enabled: true, readOnly: true },
+            { id: 'analytics', enabled: true },
+          ],
+        }),
         integrations: [
           googleConsentMode({
             security_storage: 'necessary',
@@ -67,5 +75,10 @@
         getComputedStyle(document.querySelector('#age-gate')).display !== 'none'
     </script>
     <h1>Age gate</h1>
+    <a id="gated" href="#next" data-require-consent="analytics">Open in maps</a>
+    <consent-embed id="map" category="analytics" autoactivate>
+      <button data-poster>Show map</button>
+      <template><iframe title="map" src="about:blank"></iframe></template>
+    </consent-embed>
   </body>
 </html>

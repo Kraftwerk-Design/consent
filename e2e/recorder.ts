@@ -1,7 +1,8 @@
 import { test as base, expect, type Page } from '@playwright/test'
 
 // Readers for e2e/site/_recorder.js, plus a `thirdParty` fixture that aborts
-// and logs every request not served by the fixture server.
+// and logs every request not served by the fixture server, and a `pageErrors`
+// fixture that fails any test whose page throws.
 
 export interface Entry<T = unknown> {
   nav: number
@@ -35,7 +36,16 @@ export const consentCommands = async (page: Page): Promise<Entry<unknown[]>[]> =
     (entry) => Array.isArray(entry.value) && entry.value[0] === 'consent',
   )
 
-export const test = base.extend<{ thirdParty: string[] }>({
+export const test = base.extend<{ thirdParty: string[]; pageErrors: void }>({
+  pageErrors: [
+    async ({ page }, use) => {
+      const errors: string[] = []
+      page.on('pageerror', (error) => errors.push(error.message))
+      await use()
+      expect(errors).toEqual([])
+    },
+    { auto: true },
+  ],
   thirdParty: [
     async ({ context }, use) => {
       const requests: string[] = []
