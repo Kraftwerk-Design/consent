@@ -6,7 +6,7 @@ import gcmDoc from '../docs/google-consent-mode.md?raw'
 import ageGateFixture from '../e2e/site/age-gate.html?raw'
 import modelBFixture from '../e2e/site/gcm-model-b-blitz.html?raw'
 import { ageGateHeadScript } from './ageGate'
-import { GOOGLE_CONSENT_DEFAULT_HEAD } from './head'
+import { GOOGLE_CONSENT_DEFAULT_HEAD } from './integrations/google'
 
 const between = (source: string, marker: string): string | undefined =>
   source.match(new RegExp(`<!-- ${marker} -->\\n([\\s\\S]*?)\\n<!-- /${marker} -->`))?.[1]

@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { resolveConfig } from './config'
-import { googleConsentMode } from './integrations/google'
-import { GOOGLE_CONSENT_DEFAULT_HEAD } from './head'
+import { resolveConfig } from '../config'
+import { googleConsentMode, GOOGLE_CONSENT_DEFAULT_HEAD } from './google'
 
 type W = typeof window & { dataLayer?: unknown[]; gtag?: unknown }
 const w = window as W

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { test, expect } from './recorder'
-import { GOOGLE_HEAD_SIGNALS, WAIT_FOR_UPDATE } from '../src/head'
+import { GOOGLE_HEAD_SIGNALS, WAIT_FOR_UPDATE } from '../src/integrations/google'
 
 const URL = '/e2e/site/gcm-model-b-blitz.html'
 

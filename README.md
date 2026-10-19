@@ -630,7 +630,6 @@ src/
 ├── gpc.ts                   Global Privacy Control detection
 ├── ageGate.ts               Age gate: cookie, pass, wait, head script, warnings
 ├── dom.ts                   window.KDConsent + data-require-consent listener
-├── head.ts                  GOOGLE_CONSENT_DEFAULT_HEAD
 ├── copy/en.ts               Banner copy (GPC- and mode-aware); sections from categories
 ├── core/
 │   ├── controller.ts        initConsent / confirmAge / isAgeVerified; the page's one controller
@@ -639,7 +638,7 @@ src/
 │   ├── snapshot.ts          computeSnapshot + equality
 │   └── reload.ts            shouldReload + reloadPage
 ├── integrations/
-│   ├── google.ts            googleConsentMode()
+│   ├── google.ts            googleConsentMode() + GOOGLE_CONSENT_DEFAULT_HEAD
 │   └── meta.ts              metaPixel()
 ├── elements/
 │   ├── gated.ts             defineGatedElement() + attachGate()

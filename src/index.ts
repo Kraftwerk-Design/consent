@@ -28,11 +28,10 @@ export type { ReloadPolicy } from './core/reload'
 export { attachGate, defineGatedElement } from './elements/gated'
 export type { GateOptions, Mount } from './elements/gated'
 
-export { googleConsentMode } from './integrations/google'
+export { googleConsentMode, GOOGLE_CONSENT_DEFAULT_HEAD } from './integrations/google'
 export type { GoogleConsentMap, GoogleConsentSignal } from './integrations/google'
 export { metaPixel } from './integrations/meta'
 
-export { GOOGLE_CONSENT_DEFAULT_HEAD } from './head'
 
 export { defineConsentEmbed } from './elements/embed'
 export { defineConsentPour } from './elements/pour'
