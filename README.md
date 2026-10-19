@@ -241,7 +241,8 @@ Withdrawal unmounts. `destroy()` unmounts it for good; attach again after re-ini
 
 Add `data-require-consent` to any link or button — the click is blocked and
 opens the consent UI while the category is missing, and passes through once
-granted:
+granted. While the age gate is open the click is blocked and nothing opens;
+the consent UI starts after `confirmAge()`:
 
 ```html
 <a href="https://maps.google.com/…" data-require-consent="analytics">Open in Google Maps</a>

@@ -28,7 +28,10 @@ export interface ConsentHandle {
   subscribe(fn: ConsentListener): () => void
   /** Whether the category (default: the default gate category) is effective. */
   has(category?: string): boolean
-  /** True when the category is effective; otherwise opens the consent UI. */
+  /**
+   * True when the category is effective; otherwise opens the consent UI
+   * (nothing opens while the age gate is open).
+   */
   require(category?: string): boolean
   /**
    * Open the consent UI: the banner before a choice, the preferences after.
