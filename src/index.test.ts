@@ -49,7 +49,6 @@ describe('public exports', () => {
       'GpcState',
       'Mount',
       'ReloadPolicy',
-      'ResolvedConfig',
     ])
   })
 

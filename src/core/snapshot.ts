@@ -17,7 +17,6 @@ export interface Change {
   readonly next: ConsentSnapshot
   /** On the first change, the snapshot before the library reported (`pending` or `awaiting-age`). */
   readonly prev: ConsentSnapshot
-  readonly first: boolean
   /** The reload policy reloads the page: only on a visitor's choice after the first change. */
   readonly reload: boolean
 }
@@ -47,6 +46,18 @@ function equal(a: ConsentSnapshot, b: ConsentSnapshot): boolean {
     ids.length === Object.keys(b.categories).length &&
     ids.every((id) => a.categories[id] === b.categories[id])
   )
+}
+
+/** The deny-first baseline integrations start from: readOnly categories granted, the rest denied. */
+export function baselineSnapshot(plan: CategoryPlan): ConsentSnapshot {
+  return freeze({
+    stage: 'pending',
+    recorded: false,
+    gpc: plan.gpc,
+    categories: Object.fromEntries(
+      plan.ids.map((id) => [id, plan.registered[id]?.readOnly === true]),
+    ),
+  })
 }
 
 function reloads(prev: ConsentSnapshot, next: ConsentSnapshot, policy: ReloadPolicy): boolean {
@@ -109,7 +120,6 @@ export function createSnapshotStore({
       return {
         next,
         prev,
-        first: prev === initial,
         reload: cause === 'choice' && prev.stage === 'ready' && reloads(prev, next, reload),
       }
     },

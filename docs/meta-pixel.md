@@ -17,8 +17,9 @@ or an array; the pixel is granted if **any** of them is granted.
 
 ## What it sends
 
-Init sends `fbq('consent','revoke')` in every mode. Each change then sends only
-what differs from the previous state.
+Init sends `fbq('consent','revoke')` in every mode (`grant` when `category`
+includes a readOnly one). Each change then sends only what differs from the
+previous state.
 
 | Mode | `ldu` | Denied | Granted |
 |---|---|---|---|

@@ -10,4 +10,5 @@
 - **Snapshot store**: owns the current snapshot for one page load and turns library session reports into changes (`core/snapshot.ts`).
 - **Age gate**: an optional site-rendered gate; until the visitor passes it (`confirmAge()` or the age cookie) nothing in the consent stack runs. One `AgeGate` per page owns the cookie, the pass and the wait (`ageGate.ts`).
 - **Integration**: a vendor consent-signal adapter (`googleConsentMode`, `metaPixel`) that receives each snapshot change.
+- **Baseline**: the deny-first snapshot an integration sends at init: readOnly categories granted, the rest denied. The `prev` of an integration's first change.
 - **Gated element**: a custom element whose content mounts only while its category is granted.

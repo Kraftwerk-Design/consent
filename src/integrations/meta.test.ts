@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, type Mock } from 'vitest'
-import { resolveConfig } from '../config'
 import type { ConsentSnapshot } from '../core/snapshot'
 import { describeSignalAdapter, type SignalAdapterExpectations } from '../testing/signalAdapter.contract'
 import { metaPixel } from './meta'
@@ -60,6 +59,8 @@ const snap = (analytics: boolean): ConsentSnapshot => ({
   categories: { necessary: true, analytics },
 })
 
+const BASELINE: ConsentSnapshot = { ...snap(false), stage: 'pending', recorded: false }
+
 describe('metaPixel ldu table (S-H6)', () => {
   const table: [string, 'opt-in' | 'opt-out', boolean | undefined, unknown[][], unknown[][]][] = [
     ['opt-in, default', 'opt-in', undefined, [REVOKE], [GRANT]],
@@ -73,7 +74,7 @@ describe('metaPixel ldu table (S-H6)', () => {
   it.each(table)('%s: init revoke, denied and granted per the table', (_, mode, ldu, denied, granted) => {
     const fbq = (w.fbq = vi.fn())
     const adapter = metaPixel({ category: 'analytics', ...(ldu === undefined ? {} : { ldu }) })
-    adapter.init!(resolveConfig({ mode }))
+    adapter.init!({ baseline: BASELINE, mode })
     expect(fbq.mock.calls).toEqual([REVOKE])
 
     fbq.mockClear()
@@ -85,4 +86,11 @@ describe('metaPixel ldu table (S-H6)', () => {
     expect(fbq.mock.calls).toEqual(granted)
     delete w.fbq
   })
+})
+
+it('metaPixel init grants when the baseline grants its category (a readOnly one)', () => {
+  const fbq = (w.fbq = vi.fn())
+  metaPixel({ category: 'necessary' }).init!({ baseline: BASELINE, mode: 'opt-out' })
+  expect(fbq.mock.calls).toEqual([GRANT])
+  delete w.fbq
 })

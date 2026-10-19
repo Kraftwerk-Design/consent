@@ -27,6 +27,9 @@ changes; no deprecation shims.
   booleans and the per-category `google` / `meta` fields. The gate category is
   `gateCategory`, falling back to `'analytics'`. The default categories carry
   no vendor mappings.
+- **BREAKING:** `ConsentIntegration.init` receives `{ baseline, mode }`, not
+  the resolved config; `apply`'s `prev` is never null (`baseline` on the first
+  call). `ResolvedConfig` is no longer exported.
 - **BREAKING:** `validateConsentConfig(config)` takes one argument.
 - **BREAKING:** Meta: init sends `fbq('consent', 'revoke')` in every mode, with
   no LDU. Each change sends only what differs, so a returning-rejected opt-out

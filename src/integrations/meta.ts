@@ -14,7 +14,7 @@ function getFbq(): (...args: unknown[]) => void {
 
 interface MetaPixelState {
   granted: boolean
-  /** Limited Data Use, held while an opt-out visitor is not granted. */
+  /** Limited Data Use, held while an opt-out visitor's ready snapshot is not granted. */
   ldu: boolean
 }
 
@@ -22,8 +22,9 @@ interface MetaPixelState {
  * Meta Pixel consent (`fbq('consent', 'grant' | 'revoke')`). The pixel is
  * binary: granted if ANY of `category` is granted.
  *
- * Init sends `revoke` in every mode, with no Limited Data Use, so a visitor
- * whose snapshot turns out granted is never left limited. With `ldu` (default
+ * Init sends the baseline's consent value (`revoke` unless `category` includes
+ * a readOnly one) in every mode, with no Limited Data Use, so a visitor whose
+ * snapshot turns out granted is never left limited. With `ldu` (default
  * `true`) in opt-out mode a denied visitor also gets
  * `dataProcessingOptions(['LDU'], 0, 0)`, cleared on grant; opt-in never sends
  * `dataProcessingOptions`. Each change sends only what differs from the
@@ -40,18 +41,17 @@ export function metaPixel({
   const ids = typeof category === 'string' ? [category] : [...category]
   let limit = false
 
-  const state = (snapshot: ConsentSnapshot | null): MetaPixelState => {
-    if (!snapshot) return { granted: false, ldu: false }
+  const state = (snapshot: ConsentSnapshot): MetaPixelState => {
     const granted = ids.some((id) => snapshot.categories[id] === true)
-    return { granted, ldu: limit && !granted }
+    return { granted, ldu: limit && snapshot.stage === 'ready' && !granted }
   }
 
   return {
     name: 'meta-pixel',
     categories: ids,
-    init(config) {
-      limit = ldu && config.mode === 'opt-out'
-      getFbq()('consent', 'revoke')
+    init({ baseline, mode }) {
+      limit = ldu && mode === 'opt-out'
+      getFbq()('consent', state(baseline).granted ? 'grant' : 'revoke')
     },
     apply(next, prev) {
       const to = state(next)

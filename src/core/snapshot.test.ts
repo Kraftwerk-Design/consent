@@ -103,7 +103,7 @@ describe('commit', () => {
     const before = store.current()
     attach()
     const change = store.commit('load')
-    expect(change).toEqual({ next: store.current(), prev: before, first: true, reload: false })
+    expect(change).toEqual({ next: store.current(), prev: before, reload: false })
     expect(change?.next).toBe(store.current())
     expect(change?.prev).toBe(before)
   })
@@ -132,7 +132,6 @@ describe('commit', () => {
     const applied = store.commit('load')?.next
     set(to.recorded, to.accepted)
     const change = store.commit('choice')
-    expect(change?.first).toBe(false)
     expect(change?.prev).toBe(applied)
     expect(change?.next).toBe(store.current())
   })
@@ -185,7 +184,7 @@ describe('commit', () => {
           state: { recorded: true, accepted: ANALYTICS },
         })
         attach()
-        expect(store.commit('choice')).toMatchObject({ first: true, reload: false })
+        expect(store.commit('choice')?.reload).toBe(false)
       })
     })
   })

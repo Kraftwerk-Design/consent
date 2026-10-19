@@ -609,7 +609,7 @@ Functions and constants: `initConsent`, `confirmAge`, `isAgeVerified`,
 `defineConsentEmbed`, `defineConsentPour`, `GOOGLE_CONSENT_DEFAULT_HEAD`,
 `ageGateHeadScript`.
 
-Types: `ConsentConfig`, `ResolvedConfig`, `ConsentCategory`,
+Types: `ConsentConfig`, `ConsentCategory`,
 `ConsentIntegration`, `AutoClearCookie`, `CategoryCopy`, `AgeGateConfig`,
 `CopyContext`, `ConsentHandle`, `ConsentListener`, `ConsentApi`,
 `ConsentSnapshot`, `GpcState`, `ReloadPolicy`, `GateOptions`, `Mount`,

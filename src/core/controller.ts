@@ -6,7 +6,7 @@ import { installDom } from '../dom'
 import { startLibrary, type ChangeCause, type LibrarySession } from './library'
 import { reloadPage } from './reload'
 import { defaultGateCategoryId, gpcState, planCategories } from './categories'
-import { createSnapshotStore, type ConsentSnapshot } from './snapshot'
+import { baselineSnapshot, createSnapshotStore, type ConsentSnapshot } from './snapshot'
 
 export type ConsentListener = (next: ConsentSnapshot, prev: ConsentSnapshot) => void
 
@@ -161,6 +161,7 @@ function createController(options: Partial<ConsentConfig>): ConsentHandle {
     awaitingAge: ageGate !== null && !ageGate.passed(),
   })
   const getSnapshot = store.current
+  let signalled = baselineSnapshot(plan)
 
   const refresh = (cause: ChangeCause): void => {
     if (destroyed) return
@@ -169,8 +170,9 @@ function createController(options: Partial<ConsentConfig>): ConsentHandle {
     const { next, prev } = change
 
     for (const integration of config.integrations) {
-      isolate(() => integration.apply(next, change.first ? null : prev))
+      isolate(() => integration.apply(next, signalled))
     }
+    signalled = next
     document.dispatchEvent(
       new CustomEvent(config.consentChangeEvent, { detail: next }),
     )
@@ -202,7 +204,8 @@ function createController(options: Partial<ConsentConfig>): ConsentHandle {
     warnDefaultNamePass(config.ageGate)
     warnUngatedTags()
   }
-  for (const integration of config.integrations) isolate(() => integration.init?.(config))
+  const context = { baseline: signalled, mode: config.mode }
+  for (const integration of config.integrations) isolate(() => integration.init?.(context))
 
   const ready = new Promise<void>((resolve) => {
     const run = (): void => resolve(start())

@@ -1,5 +1,4 @@
 import type { CookieConsentConfig } from 'vanilla-cookieconsent'
-import type { ResolvedConfig } from './config'
 import type { ReloadPolicy } from './core/reload'
 import type { GpcState } from './core/categories'
 import type { ConsentSnapshot } from './core/snapshot'
@@ -123,16 +122,17 @@ export interface ConsentIntegration {
   /** Category ids it reads. The validator warns about unknown ones. */
   readonly categories: readonly string[]
   /**
-   * Called once at init, before any age gate: send the deny-first default.
-   * Synchronous and non-transmitting (queue commands, never fetch).
+   * Called once at init, before any age gate: send `baseline`, the deny-first
+   * default (readOnly categories granted, the rest denied). Synchronous and
+   * non-transmitting (queue commands, never fetch).
    */
-  init?(config: ResolvedConfig): void
+  init?(context: { baseline: ConsentSnapshot; mode: ConsentConfig['mode'] }): void
   /**
    * Called once per distinct snapshot change once ready, never while awaiting
-   * the age gate. `prev` is null on the first call: diff against the `init`
-   * default. Send only what changed.
+   * the age gate. `prev` is the snapshot last applied, `baseline` on the first
+   * call. Send only what changed.
    */
-  apply(next: ConsentSnapshot, prev: ConsentSnapshot | null): void
+  apply(next: ConsentSnapshot, prev: ConsentSnapshot): void
 }
 
 /** What {@link ConsentConfig.buildCopy} is built for. */

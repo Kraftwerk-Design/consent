@@ -54,19 +54,20 @@ do: under opt-in it waits for a choice, and with an age gate for
 interface ConsentIntegration {
   readonly name: string
   readonly categories: readonly string[]
-  init?(config: ResolvedConfig): void
-  apply(next: ConsentSnapshot, prev: ConsentSnapshot | null): void
+  init?(context: { baseline: ConsentSnapshot; mode: 'opt-in' | 'opt-out' | undefined }): void
+  apply(next: ConsentSnapshot, prev: ConsentSnapshot): void
 }
 ```
 
 - `categories` lists the ids it reads; the validator warns about unknown ones.
-- `init` runs once, synchronously, before the age gate. Send only the vendor's
-  deny-first default and nothing that transmits.
+- `init` runs once, synchronously, before the age gate. Send `baseline`, the
+  deny-first default (readOnly categories granted, the rest denied), and
+  nothing that transmits.
 - `apply` never runs while the age gate is pending (`init` does, before
   `confirmAge()`).
-- `apply` runs on the first snapshot (`prev = null`) and on each distinct
-  change. Diff against `prev`, or your `init` baseline when `prev` is null, and
-  send nothing when what you map did not change.
+- `apply` runs on the first snapshot (`prev` is `baseline`) and on each
+  distinct change. Diff against `prev` and send nothing when what you map did
+  not change.
 - Grant a vendor signal if **any** of its categories is granted.
 - Don't throw when the vendor global is absent. Don't stub a global whose
   loader skips init when it already exists (Meta's `fbq`).

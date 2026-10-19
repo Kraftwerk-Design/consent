@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { resolveConfig } from '../config'
 import type { ConsentSnapshot } from '../core/snapshot'
 import { describeSignalAdapter } from '../testing/signalAdapter.contract'
 import { googleConsentMode } from './google'
@@ -64,13 +63,13 @@ const snap = (categories: Record<string, boolean>): ConsentSnapshot => ({
   categories,
 })
 
-const CONFIG = resolveConfig({
-  categories: [
-    { id: 'necessary', enabled: true, readOnly: true },
-    { id: 'a' },
-    { id: 'b' },
-  ],
-})
+const BASELINE: ConsentSnapshot = {
+  stage: 'pending',
+  recorded: false,
+  gpc: 'none',
+  categories: { necessary: true, a: false, b: false },
+}
+const CONTEXT = { baseline: BASELINE, mode: 'opt-in' } as const
 
 afterEach(() => {
   delete w.dataLayer
@@ -79,7 +78,7 @@ afterEach(() => {
 
 describe('googleConsentMode', () => {
   it('S-G1 default pushes only mapped signals', () => {
-    googleConsentMode({ analytics_storage: 'a' }).init!(CONFIG)
+    googleConsentMode({ analytics_storage: 'a' }).init!(CONTEXT)
     expect(consentCommands()).toEqual([
       ['consent', 'default', { analytics_storage: 'denied', wait_for_update: 500 }],
     ])
@@ -91,8 +90,8 @@ describe('googleConsentMode', () => {
       ad_storage: 'b',
       security_storage: ['necessary', 'a'],
     })
-    adapter.init!(CONFIG)
-    adapter.apply(snap({ necessary: true, a: true, b: false }), null)
+    adapter.init!(CONTEXT)
+    adapter.apply(snap({ necessary: true, a: true, b: false }), BASELINE)
 
     expect(consentCommands()).toEqual([
       ['consent', 'default', { analytics_storage: 'denied', ad_storage: 'denied', security_storage: 'granted', wait_for_update: 500 }],
@@ -104,7 +103,7 @@ describe('googleConsentMode', () => {
     const gtag = vi.fn()
     w.dataLayer = [{ existing: true }]
     w.gtag = gtag
-    googleConsentMode({ analytics_storage: 'a' }).init!(CONFIG)
+    googleConsentMode({ analytics_storage: 'a' }).init!(CONTEXT)
 
     expect(gtag).toHaveBeenCalledWith('consent', 'default', {
       analytics_storage: 'denied',

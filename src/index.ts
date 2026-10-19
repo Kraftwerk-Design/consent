@@ -4,7 +4,7 @@ import { defineConsentEmbed } from './elements/embed'
 import { defineConsentPour } from './elements/pour'
 
 export { validateConsentConfig } from './config'
-export type { ConsentConfig, ResolvedConfig } from './config'
+export type { ConsentConfig } from './config'
 export type {
   ConsentCategory,
   ConsentIntegration,

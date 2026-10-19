@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { resolveConfig } from '../config'
+import { planCategories } from '../core/categories'
+import { baselineSnapshot } from '../core/snapshot'
 import { googleConsentMode, GOOGLE_CONSENT_DEFAULT_HEAD } from './google'
 
 type W = typeof window & { dataLayer?: unknown[]; gtag?: unknown }
@@ -20,6 +22,9 @@ afterEach(() => {
   delete w.gtag
 })
 
+const DEFAULTS = resolveConfig()
+const CONTEXT = { baseline: baselineSnapshot(planCategories(DEFAULTS, 'none')), mode: DEFAULTS.mode }
+
 const DOCUMENTED_MAP = {
   security_storage: 'necessary',
   functionality_storage: 'necessary',
@@ -36,7 +41,7 @@ describe('GOOGLE_CONSENT_DEFAULT_HEAD', () => {
     delete w.dataLayer
     delete w.gtag
 
-    googleConsentMode(DOCUMENTED_MAP).init!(resolveConfig())
+    googleConsentMode(DOCUMENTED_MAP).init!(CONTEXT)
 
     expect(head).toHaveLength(1)
     expect(head).toEqual(dataLayerArgs())
@@ -53,7 +58,7 @@ describe('GOOGLE_CONSENT_DEFAULT_HEAD', () => {
 describe('googleConsentMode init after an earlier default (S-O2b)', () => {
   const init = (map: Parameters<typeof googleConsentMode>[0]) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    googleConsentMode(map).init!(resolveConfig())
+    googleConsentMode(map).init!(CONTEXT)
     return warn
   }
 

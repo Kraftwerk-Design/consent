@@ -114,16 +114,12 @@ export function googleConsentMode(map: GoogleConsentMap): ConsentIntegration {
     )
   const fromSnapshot = (snapshot: ConsentSnapshot): Signals =>
     signals((id) => snapshot.categories[id] === true)
-  let baseline = signals(() => false)
 
   return {
     name: 'google-consent-mode',
     categories: [...new Set(entries.flatMap(([, ids]) => ids))],
-    init(config) {
-      const readOnly = new Set(
-        config.categories.filter((category) => category.readOnly).map((category) => category.id),
-      )
-      baseline = signals((id) => readOnly.has(id))
+    init(context) {
+      const baseline = fromSnapshot(context.baseline)
       const early = earlierDefaultGrants()
       const conflicts = entries
         .map(([signal]) => signal)
@@ -137,7 +133,7 @@ export function googleConsentMode(map: GoogleConsentMap): ConsentIntegration {
     },
     apply(next, prev) {
       const to = fromSnapshot(next)
-      const from = prev ? fromSnapshot(prev) : baseline
+      const from = fromSnapshot(prev)
       if (entries.every(([signal]) => to[signal] === from[signal])) return
       getGtag()('consent', 'update', to)
     },

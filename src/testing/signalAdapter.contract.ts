@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { resolveConfig } from '../config'
 import type { ConsentIntegration } from '../config.default'
 import type { ConsentSnapshot } from '../core/snapshot'
 
@@ -9,9 +8,9 @@ type Calls = unknown[][]
 /** Vendor commands for the mapped categories, `necessary` always granted. */
 export interface SignalAdapterExpectations {
   init: Calls
-  /** First apply (`prev = null`) of a denied snapshot. */
+  /** First apply (`prev` = the baseline) of a denied snapshot. */
   denied: Calls
-  /** First apply (`prev = null`) of a granted snapshot. */
+  /** First apply (`prev` = the baseline) of a granted snapshot. */
   granted: Calls
   /** Granted → denied. */
   withdraw: Calls
@@ -48,6 +47,13 @@ const snap = (
   categories: { necessary: true, ...categories },
 })
 
+const baseline = (ids: readonly string[]): ConsentSnapshot => ({
+  stage: 'pending',
+  recorded: false,
+  gpc: 'none',
+  categories: { necessary: true, ...Object.fromEntries(ids.map((id) => [id, false])) },
+})
+
 /**
  * Contract every `ConsentIntegration` that signals a vendor must pass: absent
  * global safe, stub policy, deny-first `init` independent of mode, per-mode
@@ -58,15 +64,7 @@ const snap = (
 export function describeSignalAdapter(spec: SignalAdapterSpec): void {
   const start = (mode: Mode, ids: readonly string[] = ['analytics']) => {
     const adapter = spec.create(ids)
-    adapter.init?.(
-      resolveConfig({
-        mode,
-        categories: [
-          { id: 'necessary', enabled: true, readOnly: true },
-          ...ids.map((id) => ({ id, enabled: mode === 'opt-out' })),
-        ],
-      }),
-    )
+    adapter.init?.({ baseline: baseline(ids), mode })
     return adapter
   }
   const during = (fn: () => void): Calls => {
@@ -77,6 +75,7 @@ export function describeSignalAdapter(spec: SignalAdapterSpec): void {
 
   const GRANTED = snap({ analytics: true })
   const DENIED = snap({ analytics: false })
+  const BASELINE = baseline(['analytics'])
 
   describe(`signal adapter contract: ${spec.name}`, () => {
     beforeEach(() => spec.install())
@@ -90,7 +89,7 @@ export function describeSignalAdapter(spec: SignalAdapterSpec): void {
       spec.remove()
       expect(() => {
         const adapter = start('opt-out')
-        adapter.apply(GRANTED, null)
+        adapter.apply(GRANTED, BASELINE)
         adapter.apply(DENIED, GRANTED)
       }).not.toThrow()
       expect(spec.present()).toBe(spec.shims)
@@ -109,8 +108,8 @@ export function describeSignalAdapter(spec: SignalAdapterSpec): void {
       })
 
       it.each([
-        ['denied', DENIED, null],
-        ['granted', GRANTED, null],
+        ['denied', DENIED, BASELINE],
+        ['granted', GRANTED, BASELINE],
         ['withdraw', DENIED, GRANTED],
         ['regrant', GRANTED, DENIED],
       ] as const)('apply: %s', (key, next, prev) => {
@@ -124,12 +123,14 @@ export function describeSignalAdapter(spec: SignalAdapterSpec): void {
         ['both', { a: true, b: true }],
       ])('granted if any mapped category is (%s)', (_, categories) => {
         const adapter = start(mode, ['a', 'b'])
-        expect(during(() => adapter.apply(snap(categories), null))).toEqual(expected.granted)
+        expect(during(() => adapter.apply(snap(categories), baseline(['a', 'b'])))).toEqual(
+          expected.granted,
+        )
       })
 
       it('denied when no mapped category is granted', () => {
         const adapter = start(mode, ['a', 'b'])
-        expect(during(() => adapter.apply(snap({ a: false, b: false }), null))).toEqual(
+        expect(during(() => adapter.apply(snap({ a: false, b: false }), baseline(['a', 'b'])))).toEqual(
           expected.denied,
         )
       })
@@ -157,7 +158,7 @@ export function describeSignalAdapter(spec: SignalAdapterSpec): void {
 
     it('opt-in: nothing when the first snapshot equals the init baseline', () => {
       const adapter = start('opt-in')
-      expect(during(() => adapter.apply(DENIED, null))).toEqual([])
+      expect(during(() => adapter.apply(DENIED, BASELINE))).toEqual([])
     })
   })
 }
