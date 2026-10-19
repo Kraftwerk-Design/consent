@@ -54,7 +54,7 @@ do: under opt-in it waits for a choice, and with an age gate for
 interface ConsentIntegration {
   readonly name: string
   readonly categories: readonly string[]
-  init?(context: { baseline: ConsentSnapshot; mode: 'opt-in' | 'opt-out' | undefined }): void
+  init?(context: { baseline: ConsentSnapshot; mode: 'opt-in' | 'opt-out' }): void
   apply(next: ConsentSnapshot, prev: ConsentSnapshot): void
 }
 ```

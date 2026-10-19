@@ -53,7 +53,7 @@ export interface ConsentCategory {
  * a project passes a `Partial<ConsentConfig>` to `initConsent()` to override.
  */
 export interface ConsentConfig {
-  mode: CookieConsentConfig['mode']
+  mode: NonNullable<CookieConsentConfig['mode']>
   /** Consent cookie name — override per project. */
   cookieName: string
   /** Privacy policy link shown in the preferences modal. */
