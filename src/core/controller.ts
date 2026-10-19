@@ -4,14 +4,9 @@ import { hasGpcSignal } from '../gpc'
 import { createAgeGate, warnDefaultNamePass, warnUngatedTags, type AgeGate } from '../ageGate'
 import { installDom } from '../dom'
 import { startLibrary, type ChangeCause, type LibrarySession } from './library'
-import { reloadPage, shouldReload } from './reload'
+import { reloadPage } from './reload'
 import { defaultGateCategoryId, gpcState, planCategories } from './categories'
-import {
-  computeSnapshot,
-  pendingSnapshot,
-  snapshotsEqual,
-  type ConsentSnapshot,
-} from './snapshot'
+import { createSnapshotStore, type ConsentSnapshot } from './snapshot'
 
 export type ConsentListener = (next: ConsentSnapshot, prev: ConsentSnapshot) => void
 
@@ -155,44 +150,37 @@ function createController(options: Partial<ConsentConfig>): ConsentHandle {
   const subscribers = new Set<ConsentListener>()
 
   const ageGate = config.ageGate ? createAgeGate(config.ageGate) : null
-  const ageOk = (): boolean => ageGate?.passed() ?? true
   let cancelAgeWait = (): void => {}
   let session: LibrarySession | null = null
+  let detach = (): void => {}
   let destroyed = false
 
-  const initial = ageOk()
-    ? pendingSnapshot(plan)
-    : computeSnapshot({ plan, ageOk: false, recorded: false, accepted: [] })
-  let latest = initial
-  let applied: ConsentSnapshot | null = null
-
-  // Read live so scripts the library releases before its callbacks fire
-  // already see the new state.
-  const getSnapshot = (): ConsentSnapshot => {
-    if (!session) return latest
-    const live = computeSnapshot({ plan, ageOk: ageOk(), ...session.read() })
-    if (!snapshotsEqual(latest, live)) latest = live
-    return latest
-  }
+  const store = createSnapshotStore({
+    plan,
+    reload: config.reload,
+    awaitingAge: ageGate !== null && !ageGate.passed(),
+  })
+  const getSnapshot = store.current
 
   const refresh = (cause: ChangeCause): void => {
     if (destroyed) return
-    const next = getSnapshot()
-    if (next.stage === 'awaiting-age') return
-    const prev = applied
-    if (prev && snapshotsEqual(prev, next)) return
-    applied = next
+    const change = store.commit(cause)
+    if (!change) return
+    const { next, prev } = change
 
-    for (const integration of config.integrations) isolate(() => integration.apply(next, prev))
+    for (const integration of config.integrations) {
+      isolate(() => integration.apply(next, change.first ? null : prev))
+    }
     document.dispatchEvent(
       new CustomEvent(config.consentChangeEvent, { detail: next }),
     )
-    if (shouldReload(prev ?? initial, next, config.reload, cause)) reloadPage()
-    for (const fn of subscribers) isolate(() => fn(next, prev ?? initial))
+    if (change.reload) reloadPage()
+    for (const fn of subscribers) isolate(() => fn(next, prev))
   }
 
   const start = (): Promise<void> => {
     session = startLibrary(config, plan, refresh)
+    detach = store.attach(session.read)
     return session.ready
   }
 
@@ -241,6 +229,7 @@ function createController(options: Partial<ConsentConfig>): ConsentHandle {
       cancelAgeWait()
       subscribers.clear()
       removeDom()
+      detach()
       session?.reset()
       session = null
       unpublish()

@@ -635,8 +635,8 @@ src/
 │   ├── controller.ts        initConsent / confirmAge / isAgeVerified; the page's one controller
 │   ├── categories.ts        GPC state + category plan (registration, clamp, effective consent)
 │   ├── library.ts           Only importer of vanilla-cookieconsent
-│   ├── snapshot.ts          computeSnapshot + equality
-│   └── reload.ts            shouldReload + reloadPage
+│   ├── snapshot.ts          Snapshot store: current snapshot, changes, reload decision
+│   └── reload.ts            Reload policies + reloadPage
 ├── integrations/
 │   ├── google.ts            googleConsentMode() + GOOGLE_CONSENT_DEFAULT_HEAD
 │   └── meta.ts              metaPixel()
